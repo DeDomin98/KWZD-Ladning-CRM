@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /crm/
+Disallow: /crm/*
+
+# Sitemap
+Sitemap: https://wyjscie-z-dlugow.pl/sitemap.xml

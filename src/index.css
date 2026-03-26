@@ -1,0 +1,244 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+/* 1. DEFINICJA ZMIENNYCH DLA MOTYWÓW */
+:root {
+  /* --- DOMYŚLNY MOTYW (STONE / SZARY BEŻ) --- */
+  /* To są standardowe wartości Tailwind Stone */
+  --crm-50: #fafaf9;
+  --crm-100: #f5f5f4;
+  --crm-200: #e7e5e4;
+  --crm-300: #d6d3d1;
+  --crm-400: #a8a29e;
+  --crm-500: #78716c;
+  --crm-600: #57534e;
+  --crm-700: #44403c;
+  --crm-800: #292524;
+  --crm-900: #1c1917;  /* Ciemne tło sidebaru */
+  --crm-950: #0c0a09;
+}
+
+/* --- MOTYW RÓŻOWY (ELEGANCKI & PROFESJONALNY) --- */
+/* Aktywuje się, gdy <html> ma atrybut data-theme="pink" */
+[data-theme="pink"] {
+  /* TŁA: Czyste, pudrowe, eleganckie - subtelne różowe odcienie */
+  --crm-50: #fdf2f8;   /* Bardzo jasne tło - pudrowy róż */
+  --crm-100: #fce7f3;  /* Tło elementów interaktywnych - delikatny róż */
+  --crm-200: #fbcfe8;  /* Lekkie akcenty tła - subtelny róż */
+  
+  /* RAMKI: Delikatne, widoczne ale nie nachalne */
+  --crm-300: #f9a8d4;  /* Różowe ramki - miękkie, eleganckie */
+  
+  /* TEKST MUTED: Czytelny, stonowany */
+  --crm-400: #c084fc;  /* Fioletowo-różowy dla ikon i tekstów pomocniczych */
+  
+  /* TEKST DRUGORZĘDNY: Wyraźny ale nie dominujący */
+  --crm-500: #a855f7;  /* Głębszy fioletowo-różowy dla podtytułów */
+  
+  /* AKCENTY: Eleganckie, żywe ale nie krzykliwe */
+  --crm-600: #ec4899;  /* Różowy akcent - elegancki i wyrazisty */
+  --crm-700: #db2777;  /* Głębszy róż dla hover states */
+  
+  /* TEKST GŁÓWNY: Ciemny, czytelny */
+  --crm-800: #831843;  /* Ciemny różowy-burgund dla nagłówków */
+  
+  /* SIDEBAR: Profesjonalny, ciemny szary z subtelnym różowym odcieniem */
+  --crm-900: #2d1b2e;  /* Ciemny szaro-fioletowy - profesjonalny, nie czerwony */
+  --crm-950: #1a0f1b;  /* Najciemniejszy odcień dla głębokich cieni */
+  
+  /* DODATKOWE ZMIENNE DLA PROFESJONALNEGO WYGLĄDU */
+  --sidebar-bg: #1e1b24;        /* Tło sidebara - ciemny szary z bardzo subtelnym różowym odcieniem */
+  --sidebar-text: #f5f3ff;     /* Tekst w sidebarze - bardzo jasny, prawie biały z lekkim fioletowym odcieniem */
+  --sidebar-text-muted: #a78bfa; /* Tekst pomocniczy - średni fioletowy, czytelny */
+  --sidebar-hover: #2a2532;      /* Hover w sidebarze - jaśniejszy szary */
+  --sidebar-active: #fce7f3;    /* Aktywny element - pudrowy róż */
+  --sidebar-active-text: #831843; /* Tekst aktywny - ciemny różowy */
+  --sidebar-border: #3d3542;    /* Ramki w sidebarze - ciemny szaro-fioletowy */
+}
+
+@theme {
+  /* --- TWOJE KOLORY FIRMOWE (DLA STRONY PUBLICZNEJ) --- */
+  /* Pozostają bez zmian, używane na stronie głównej */
+  
+  /* Granat - Prawo, Stabilność */
+  --color-primary-950: #020617;
+  --color-primary-900: #0f172a;
+  --color-primary-800: #1e293b;
+  --color-primary-700: #334155;
+  
+  /* Niebieski - Akcent, Nadzieja */
+  --color-primary-600: #2563eb;
+  --color-primary-500: #3b82f6;
+
+  /* Tła i Teksty */
+  --color-bg-light: #f8fafc;
+  --color-text-main: #0f172a;
+  --color-text-muted: #64748b;
+
+  /* Fonty */
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  
+  /* Inne */
+  --radius-xl: 0.75rem;
+  --animate-fade-in: fade-in 0.5s ease-out;
+
+  /* --- NADPISANIE PALETY STONE (DLA CRM) --- */
+  /* Tutaj mapujemy nazwę 'stone' na nasze dynamiczne zmienne --crm-* */
+  /* Dzięki temu bg-stone-900 zmieni kolor automatycznie */
+  --color-stone-50: var(--crm-50);
+  --color-stone-100: var(--crm-100);
+  --color-stone-200: var(--crm-200);
+  --color-stone-300: var(--crm-300);
+  --color-stone-400: var(--crm-400);
+  --color-stone-500: var(--crm-500);
+  --color-stone-600: var(--crm-600);
+  --color-stone-700: var(--crm-700);
+  --color-stone-800: var(--crm-800);
+  --color-stone-900: var(--crm-900);
+  --color-stone-950: var(--crm-950);
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-bg-light);
+  color: var(--color-text-main);
+}
+
+/* Tło body dla motywu różowego */
+[data-theme="pink"] body {
+  background-color: var(--crm-50);
+}
+
+/* PROFESJONALNE STYLE DLA MOTYWU RÓŻOWEGO */
+[data-theme="pink"] {
+  /* Sidebar - profesjonalny wygląd */
+  --sidebar-bg-color: var(--sidebar-bg);
+  --sidebar-text-color: var(--sidebar-text);
+  --sidebar-text-muted-color: var(--sidebar-text-muted);
+  --sidebar-hover-bg: var(--sidebar-hover);
+  --sidebar-active-bg: var(--sidebar-active);
+  --sidebar-active-text-color: var(--sidebar-active-text);
+  --sidebar-border-color: var(--sidebar-border);
+}
+
+/* Nadpisanie kolorów sidebara w motywie różowym - tylko w kontekście sidebara */
+[data-theme="pink"] aside.bg-stone-900,
+[data-theme="pink"] aside .bg-stone-900 {
+  background-color: var(--sidebar-bg) !important;
+}
+
+[data-theme="pink"] aside .bg-stone-800 {
+  background-color: var(--sidebar-hover) !important;
+}
+
+[data-theme="pink"] aside .bg-stone-700 {
+  background-color: var(--sidebar-border) !important;
+}
+
+[data-theme="pink"] aside .border-stone-800,
+[data-theme="pink"] aside .border-stone-700,
+[data-theme="pink"] aside .border-stone-600 {
+  border-color: var(--sidebar-border) !important;
+}
+
+/* Teksty w sidebarze - tylko w kontekście sidebara */
+[data-theme="pink"] aside .text-white,
+[data-theme="pink"] aside h1,
+[data-theme="pink"] aside h2,
+[data-theme="pink"] aside h3,
+[data-theme="pink"] aside h4 {
+  color: var(--sidebar-text) !important;
+}
+
+[data-theme="pink"] aside .text-stone-200 {
+  color: var(--sidebar-text) !important;
+}
+
+[data-theme="pink"] aside .text-stone-400,
+[data-theme="pink"] aside .text-stone-500,
+[data-theme="pink"] aside p {
+  color: var(--sidebar-text-muted) !important;
+}
+
+/* Hover states w sidebarze */
+[data-theme="pink"] aside .hover\:bg-stone-800:hover {
+  background-color: var(--sidebar-hover) !important;
+}
+
+[data-theme="pink"] aside .hover\:text-white:hover {
+  color: var(--sidebar-text) !important;
+}
+
+/* Aktywne stany w sidebarze */
+[data-theme="pink"] aside .bg-white.text-stone-900,
+[data-theme="pink"] aside a[aria-current="page"] {
+  background-color: var(--sidebar-active) !important;
+  color: var(--sidebar-active-text) !important;
+}
+
+/* Header - subtelny różowy akcent */
+[data-theme="pink"] .bg-white {
+  background-color: #ffffff !important;
+}
+
+[data-theme="pink"] .border-stone-200 {
+  border-color: var(--crm-200) !important;
+}
+
+/* Teksty w głównej treści */
+[data-theme="pink"] .text-stone-900 {
+  color: var(--crm-800) !important;
+}
+
+[data-theme="pink"] .text-stone-600 {
+  color: var(--crm-500) !important;
+}
+
+[data-theme="pink"] .text-stone-500 {
+  color: var(--crm-400) !important;
+}
+
+/* Tła elementów */
+[data-theme="pink"] .bg-stone-100 {
+  background-color: var(--crm-50) !important;
+}
+
+[data-theme="pink"] .bg-stone-50 {
+  background-color: var(--crm-100) !important;
+}
+
+/* Ramki i borders */
+[data-theme="pink"] .border-stone-300 {
+  border-color: var(--crm-300) !important;
+}
+
+/* Przyciski scrollowania w sidebarze */
+[data-theme="pink"] .bg-stone-800\/90 {
+  background-color: rgba(61, 42, 63, 0.9) !important;
+}
+
+[data-theme="pink"] .hover\:bg-stone-700:hover {
+  background-color: var(--sidebar-border) !important;
+}
+
+[data-theme="pink"] .border-stone-700\/50 {
+  border-color: rgba(76, 29, 79, 0.5) !important;
+}
+
+/* Czat grupowy w sidebarze */
+[data-theme="pink"] .bg-stone-800\/30 {
+  background-color: rgba(61, 42, 63, 0.3) !important;
+}
+
+/* Avatary użytkowników */
+[data-theme="pink"] .bg-stone-600 {
+  background-color: var(--sidebar-border) !important;
+}
+
+/* Badge powiadomień - pozostają czerwone dla widoczności */
+/* Status online - pozostaje zielony dla czytelności */
