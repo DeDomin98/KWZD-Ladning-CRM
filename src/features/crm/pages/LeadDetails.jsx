@@ -16,7 +16,8 @@ const LeadDetails = () => {
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
 
-  const { displayName: currentUser, userData, isRestricted } = useAuth();
+  const { displayName: currentUser, userData, isRestricted, canSeeLeads } = useAuth();
+
   const [agents, setAgents] = useState([]);
   
   // Pobierz listę agentów

@@ -15,7 +15,7 @@ const Leads = () => {
   const location = useLocation();
   const department = location.pathname.split('/')[2]; // 'upadlosci' or 'negocjacje'
 
-  const { displayName: currentUser, isRestricted, isNegocjacjeOnly, canSeeAllLeads, userData } = useAuth();
+  const { displayName: currentUser, isRestricted, isNegocjacjeOnly, canSeeAllLeads, canSeeLeads, userData } = useAuth();
 
 
   // Filtry z URL

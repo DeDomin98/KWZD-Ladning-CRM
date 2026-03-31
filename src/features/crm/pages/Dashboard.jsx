@@ -71,6 +71,8 @@ const Dashboard = ({ department }) => {
         }
         // Non-client leads: filter by qualifiedFor if set
         if (l.qualifiedFor) return l.qualifiedFor === department;
+        // isNegocjacjeOnly users should not see unqualified leads (may be from upadłości)
+        if (isNegocjacjeOnly) return false;
         return true; // unqualified leads visible in all views
       });
 

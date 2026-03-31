@@ -7,7 +7,6 @@ const InviteManager = () => {
   const [invites, setInvites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState('agent_negocjacje');
   const [existingUid, setExistingUid] = useState('');
   const [copied, setCopied] = useState(null);
@@ -31,17 +30,12 @@ const InviteManager = () => {
   };
 
   const handleCreate = async () => {
-    if (!newName.trim()) {
-      alert('Podaj imię i nazwisko');
-      return;
-    }
-
     setCreating(true);
     try {
       const token = generateToken();
       await addDoc(collection(db, 'invitations'), {
         token,
-        displayName: newName.trim(),
+        displayName: null,
         role: newRole,
         uid: existingUid.trim() || null, // jeśli podasz uid istniejącego konta, link je przejmie
         used: false,
@@ -50,7 +44,6 @@ const InviteManager = () => {
         createdAt: serverTimestamp(),
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 dni
       });
-      setNewName('');
       setNewRole('agent_negocjacje');
       setExistingUid('');
     } catch (error) {
@@ -101,20 +94,6 @@ const InviteManager = () => {
         <div className="space-y-3">
           <div>
             <label className="block text-sm font-medium text-stone-700 mb-2">
-              Imię i nazwisko nowego użytkownika
-            </label>
-            <input
-              type="text"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-              placeholder="Jan Kowalski"
-              className="w-full px-4 py-2.5 border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400 bg-white"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-stone-700 mb-2">
               Rola w systemie
             </label>
             <select
@@ -151,7 +130,7 @@ const InviteManager = () => {
             </p>
             <button
               onClick={handleCreate}
-              disabled={creating || !newName.trim()}
+              disabled={creating}
               className="px-5 py-2.5 bg-stone-900 text-white rounded-lg hover:bg-stone-800 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
             >
               {creating ? 'Generowanie...' : 'Generuj link'}
@@ -185,7 +164,7 @@ const InviteManager = () => {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <p className="font-medium text-stone-900">{invite.displayName}</p>
+                      <p className="font-medium text-stone-900">{invite.displayName || 'Nowy użytkownik'}</p>
                       {invite.role && USER_ROLES[invite.role] && (
                         <span className="px-2 py-0.5 bg-stone-100 text-stone-600 text-xs font-medium rounded-full">
                           {USER_ROLES[invite.role].label}

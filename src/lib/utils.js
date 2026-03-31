@@ -187,6 +187,7 @@ export const USER_ROLES = {
     label: 'Administrator',
     departments: ['upadlosci', 'negocjacje'],
     canSeeAllLeads: true,
+    canSeeLeads: true,
     canSeeFinances: true,
     canSeeSettings: true,
     isRestricted: false
@@ -195,6 +196,7 @@ export const USER_ROLES = {
     label: 'Agent Negocjacji',
     departments: ['negocjacje'],
     canSeeAllLeads: false, // widzi tylko leady qualified for negocjacje
+    canSeeLeads: true,
     canSeeFinances: true, // ale tylko negocjacje
     canSeeSettings: false,
     isRestricted: false
@@ -203,6 +205,7 @@ export const USER_ROLES = {
     label: 'Pracownik Upadłości (ograniczony)',
     departments: ['upadlosci'],
     canSeeAllLeads: false,
+    canSeeLeads: true,
     canSeeFinances: false,
     canSeeSettings: false,
     isRestricted: true
@@ -211,9 +214,10 @@ export const USER_ROLES = {
     label: 'Pracownik Negocjacji (ograniczony)',
     departments: ['negocjacje'],
     canSeeAllLeads: false,
-    canSeeFinances: false,
+    canSeeLeads: true,
+    canSeeFinances: true,
     canSeeSettings: false,
-    isRestricted: true
+    isRestricted: false
   }
 };
 

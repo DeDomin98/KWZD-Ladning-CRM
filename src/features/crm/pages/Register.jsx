@@ -14,6 +14,7 @@ const Register = () => {
   const [submitting, setSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
+    displayName: '',
     email: '',
     password: '',
     confirmPassword: ''
@@ -62,6 +63,11 @@ const Register = () => {
     setError(null);
 
     // Walidacja
+    if (!formData.displayName.trim()) {
+      setError('Podaj imię i nazwisko');
+      return;
+    }
+
     if (formData.password.length < 6) {
       setError('Hasło musi mieć co najmniej 6 znaków');
       return;
@@ -103,7 +109,7 @@ const Register = () => {
 
         // 2. Ustaw displayName
         await updateProfile(userCredential.user, {
-          displayName: invitation.displayName
+          displayName: formData.displayName.trim()
         });
 
         // 3. Utwórz dokument użytkownika w Firestore
@@ -111,7 +117,7 @@ const Register = () => {
         await setDoc(doc(db, 'users', userCredential.user.uid), {
           uid: userCredential.user.uid,
           email: formData.email,
-          displayName: invitation.displayName,
+          displayName: formData.displayName.trim(),
           role: invitation.role || 'agent',
           isOnline: true,
           lastActiveAt: serverTimestamp(),
@@ -122,6 +128,7 @@ const Register = () => {
         await updateDoc(doc(db, 'invitations', invitation.id), {
           used: true,
           usedBy: formData.email,
+          displayName: formData.displayName.trim(),
           usedAt: new Date().toISOString()
         });
       }
@@ -201,13 +208,27 @@ const Register = () => {
           </div>
           <h1 className="text-2xl font-semibold text-stone-900">Witaj w zespole!</h1>
           <p className="text-stone-500 mt-2">
-            Tworzysz konto jako: <strong className="text-stone-900">{invitation.displayName}</strong>
+            Utwórz swoje konto, aby dołączyć do zespołu.
           </p>
         </div>
 
         {/* Formularz */}
         <form onSubmit={handleSubmit} className="space-y-4">
           
+          <div>
+            <label className="block text-sm font-medium text-stone-700 mb-1.5">
+              Imię i nazwisko
+            </label>
+            <input
+              type="text"
+              required
+              value={formData.displayName}
+              onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
+              className="w-full px-4 py-3 border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400 transition-colors text-base"
+              placeholder="Jan Kowalski"
+            />
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-stone-700 mb-1.5">
               Twój adres email
