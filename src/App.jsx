@@ -31,6 +31,9 @@ import Contracts from './features/crm/pages/Contracts';
 // Import ThemeProvider
 import { ThemeProvider } from './context/ThemeContext';
 
+// Phone module (test)
+import PhonePage from './phone';
+
 function App() {
   return (
     <AuthProvider>
@@ -59,6 +62,9 @@ function App() {
           }>
             {/* Wybór działu */}
             <Route index element={<DepartmentSelect />} />
+
+            {/* PHONE - bramka telefoniczna (moduł testowy) */}
+            <Route path="phone" element={<PhonePage />} />
 
             {/* UPADŁOŚCI */}
             <Route path="upadlosci" element={<CrmLayout department="upadlosci" />}>

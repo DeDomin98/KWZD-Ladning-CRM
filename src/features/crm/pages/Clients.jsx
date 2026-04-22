@@ -261,7 +261,7 @@ const categorizeClients = (list) => {
                 <Link
                   key={client.id}
                   to={`/crm/${department || 'upadlosci'}/klienci/${client.id}`}
-                  className="flex flex-col lg:flex-row lg:items-center justify-between px-6 py-5 hover:bg-stone-50 transition-colors gap-4"
+                  className="flex flex-col lg:flex-row lg:items-center justify-between px-6 py-5 hover:bg-stone-50 transition-colors gap-4 group"
                 >
                   {/* Info klienta */}
                   <div className="flex items-center gap-4">
@@ -309,6 +309,18 @@ const categorizeClients = (list) => {
                         {paymentStatus.label}
                       </span>
                     )}
+                    <Link
+                      to={`/crm/${department || 'upadlosci'}/klienci/${client.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="p-1.5 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors opacity-0 group-hover:opacity-100"
+                      title="Otwórz w nowej karcie"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </Link>
                     <div className="flex items-center gap-2 text-stone-400">
                       <span className="text-sm font-medium">Otwórz teczkę</span>
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

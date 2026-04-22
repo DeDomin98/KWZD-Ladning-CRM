@@ -15,6 +15,8 @@ const LeadDetails = () => {
   const [showContactModal, setShowContactModal] = useState(false);
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [emailValue, setEmailValue] = useState('');
 
   const { displayName: currentUser, userData, isRestricted, canSeeLeads } = useAuth();
 
@@ -57,6 +59,13 @@ const LeadDetails = () => {
   useEffect(() => {
     fetchLead();
   }, [id]);
+
+  const handleSaveEmail = async () => {
+    const trimmed = emailValue.trim();
+    await updateDoc(doc(db, "leads", id), { email: trimmed || null });
+    setEditingEmail(false);
+    fetchLead();
+  };
 
   // Zmiana statusu
   const handleStatusChange = async (newStatus) => {
@@ -327,6 +336,50 @@ const LeadDetails = () => {
 
       {/* Content */}
       <div className="max-w-6xl mx-auto px-8 py-8">
+
+        {/* Dane z kampanii — wyróżniony baner */}
+        {(lead.formAnswer || lead.notes) && (
+          <div className="mb-8 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="font-semibold text-blue-900 text-lg">Dane z kampanii</h2>
+                <p className="text-sm text-blue-600">Informacje podane w formularzu reklamowym</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {lead.formAnswer && typeof lead.formAnswer === 'object' && (
+                Object.entries(lead.formAnswer)
+                  .filter(([key]) => !['full_name', 'first_name', 'last_name', 'email', 'phone_number'].includes(key))
+                  .map(([key, value]) => {
+                    if (!value) return null;
+                    const label = key
+                      .replace(/_/g, ' ')
+                      .replace(/\b\w/g, c => c.toUpperCase());
+                    return (
+                      <div key={key} className="bg-white/80 backdrop-blur-sm rounded-lg px-4 py-3 border border-blue-100">
+                        <label className="text-xs font-medium text-blue-500 uppercase tracking-wide">{label}</label>
+                        <p className="text-blue-900 mt-0.5 font-semibold text-lg">{String(value)}</p>
+                      </div>
+                    );
+                  })
+              )}
+
+              {lead.notes && (
+                <div className="bg-white/80 backdrop-blur-sm rounded-lg px-4 py-3 border border-blue-100 sm:col-span-2 lg:col-span-3">
+                  <label className="text-xs font-medium text-blue-500 uppercase tracking-wide">Notatka</label>
+                  <p className="text-blue-900 mt-0.5 font-medium whitespace-pre-wrap">{lead.notes}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
           {/* Lewa kolumna - Info */}
@@ -343,7 +396,36 @@ const LeadDetails = () => {
                 </div>
                 <div>
                   <label className="text-xs font-medium text-stone-400 uppercase tracking-wide">Email</label>
-                  <p className="text-stone-700 mt-1">{lead.email || '—'}</p>
+                  {editingEmail ? (
+                    <div className="flex items-center gap-2 mt-1">
+                      <input
+                        type="email"
+                        value={emailValue}
+                        onChange={(e) => setEmailValue(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleSaveEmail(); if (e.key === 'Escape') setEditingEmail(false); }}
+                        className="flex-1 px-2 py-1 border border-stone-300 rounded text-sm focus:outline-none focus:border-stone-500"
+                        autoFocus
+                        placeholder="email@example.com"
+                      />
+                      <button onClick={handleSaveEmail} className="p-1 text-emerald-600 hover:text-emerald-700" title="Zapisz">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                      </button>
+                      <button onClick={() => setEditingEmail(false)} className="p-1 text-stone-400 hover:text-stone-600" title="Anuluj">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 mt-1">
+                      <p className="text-stone-700">{lead.email || '—'}</p>
+                      <button
+                        onClick={() => { setEmailValue(lead.email || ''); setEditingEmail(true); }}
+                        className="p-1 text-stone-400 hover:text-stone-700 transition-colors"
+                        title="Edytuj email"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="text-xs font-medium text-stone-400 uppercase tracking-wide">Źródło</label>

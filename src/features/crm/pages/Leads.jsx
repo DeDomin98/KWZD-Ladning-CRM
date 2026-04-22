@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc } from "firebase/firestore";
+import { collection, addDoc, query, onSnapshot, serverTimestamp, doc, updateDoc } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { formatPLN, timeSinceLead, LEAD_STATUSES, SERVICE_TYPES, DEPARTMENTS } from "../../../lib/utils";
-import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom';
 import { useAuth } from "../../../hooks/useAuth";
 
 const Leads = () => {
@@ -39,12 +39,22 @@ const Leads = () => {
   });
 
   useEffect(() => {
-    const q = query(collection(db, "leads"), orderBy("createdAt", "desc"));
+    const q = query(collection(db, "leads"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const leadsData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
+      // Sortuj po createdAt (desc) — obsługuje timestamp i string ISO
+      leadsData.sort((a, b) => {
+        const toMs = (v) => {
+          if (!v) return 0;
+          if (v.seconds) return v.seconds * 1000;
+          const d = new Date(v);
+          return isNaN(d) ? 0 : d.getTime();
+        };
+        return toMs(b.createdAt) - toMs(a.createdAt);
+      });
       setLeads(leadsData);
       setLoading(false);
     });
@@ -112,7 +122,7 @@ const Leads = () => {
       const q = filters.search.toLowerCase();
       result = result.filter(l =>
         l.name?.toLowerCase().includes(q) ||
-        l.phone?.includes(q) ||
+        String(l.phone || '').includes(q) ||
         l.email?.toLowerCase().includes(q)
       );
     }
@@ -125,6 +135,7 @@ const Leads = () => {
         const leadDate = createdAt?.seconds
           ? new Date(createdAt.seconds * 1000)
           : new Date(createdAt);
+        if (isNaN(leadDate)) return false;
         const leadDayStart = new Date(leadDate.getFullYear(), leadDate.getMonth(), leadDate.getDate());
         if (filters.dateFrom) {
           const from = new Date(filters.dateFrom);
@@ -527,8 +538,20 @@ const Leads = () => {
                 filteredLeads.map((lead) => (
                   <tr
                     key={lead.id}
-                    onClick={() => navigate(`/crm/${department}/leady/${lead.id}`)}
-                    className="hover:bg-stone-50 cursor-pointer transition-colors"
+                    onClick={(e) => {
+                      if (e.ctrlKey || e.metaKey || e.button === 1) {
+                        window.open(`/crm/${department}/leady/${lead.id}`, '_blank');
+                      } else {
+                        navigate(`/crm/${department}/leady/${lead.id}`);
+                      }
+                    }}
+                    onAuxClick={(e) => {
+                      if (e.button === 1) {
+                        e.preventDefault();
+                        window.open(`/crm/${department}/leady/${lead.id}`, '_blank');
+                      }
+                    }}
+                    className="hover:bg-stone-50 cursor-pointer transition-colors group"
                   >
                     <td className="px-6 py-4 overflow-hidden">
                       <div className="flex items-center gap-3 min-w-0">
@@ -544,6 +567,19 @@ const Leads = () => {
                               {SERVICE_TYPES[lead.serviceType]?.shortLabel}
                               {lead.servicePrice && ` • ${formatPLN(lead.servicePrice)}`}
                             </p>
+                          )}
+                          {lead.formAnswer && typeof lead.formAnswer === 'object' && (() => {
+                            const extras = Object.entries(lead.formAnswer)
+                              .filter(([k]) => !['full_name','first_name','last_name','email','phone_number'].includes(k))
+                              .filter(([, v]) => v)
+                              .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`)
+                              .join(' • ');
+                            return extras ? (
+                              <p className="text-xs text-blue-600 truncate mt-0.5" title={extras}>📋 {extras}</p>
+                            ) : null;
+                          })()}
+                          {!lead.formAnswer && lead.notes && (
+                            <p className="text-xs text-stone-400 truncate mt-0.5" title={lead.notes}>{lead.notes}</p>
                           )}
                         </div>
                       </div>
@@ -580,6 +616,7 @@ const Leads = () => {
                     </td>
 
                     <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-1">
                       {!lead.assignedTo ? (
                         <button
                           onClick={(e) => handleAssign(lead.id, e)}
@@ -601,6 +638,19 @@ const Leads = () => {
                           </svg>
                         </button>
                       )}
+                      <Link
+                        to={`/crm/${department}/leady/${lead.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="p-1.5 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors"
+                        title="Otwórz w nowej karcie"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                      </Link>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -620,7 +670,13 @@ const Leads = () => {
           filteredLeads.map((lead) => (
             <div
               key={lead.id}
-              onClick={() => navigate(`/crm/${department}/leady/${lead.id}`)}
+              onClick={(e) => {
+                if (e.ctrlKey || e.metaKey) {
+                  window.open(`/crm/${department}/leady/${lead.id}`, '_blank');
+                } else {
+                  navigate(`/crm/${department}/leady/${lead.id}`);
+                }
+              }}
               className="bg-white rounded-xl border border-stone-200 p-4 active:bg-stone-50 transition-colors"
             >
               <div className="flex items-start justify-between mb-3">
@@ -633,6 +689,19 @@ const Leads = () => {
                   <div>
                     <p className="font-semibold text-stone-900">{lead.name || 'Brak nazwy'}</p>
                     <p className="text-sm text-stone-500">{lead.phone}</p>
+                    {lead.formAnswer && typeof lead.formAnswer === 'object' && (() => {
+                      const extras = Object.entries(lead.formAnswer)
+                        .filter(([k]) => !['full_name','first_name','last_name','email','phone_number'].includes(k))
+                        .filter(([, v]) => v)
+                        .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`)
+                        .join(' • ');
+                      return extras ? (
+                        <p className="text-xs text-blue-600 truncate mt-0.5">📋 {extras}</p>
+                      ) : null;
+                    })()}
+                    {!lead.formAnswer && lead.notes && (
+                      <p className="text-xs text-stone-400 truncate mt-0.5">{lead.notes}</p>
+                    )}
                   </div>
                 </div>
                 <TimeIndicator createdAt={lead.createdAt} />
@@ -674,11 +743,25 @@ const Leads = () => {
                     Biorę
                   </button>
                 ) : (
-                  <div className="flex items-center gap-1 text-stone-400">
-                    <span className="text-sm">Otwórz</span>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      to={`/crm/${department}/leady/${lead.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="p-1.5 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors"
+                      title="Otwórz w nowej karcie"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </Link>
+                    <div className="flex items-center gap-1 text-stone-400">
+                      <span className="text-sm">Otwórz</span>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
                   </div>
                 )}
               </div>

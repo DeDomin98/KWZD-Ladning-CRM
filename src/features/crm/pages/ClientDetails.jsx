@@ -31,6 +31,8 @@ const ClientDetails = ({ department }) => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showInstallmentModal, setShowInstallmentModal] = useState(false);
   const [clientStatus, setClientStatus] = useState(client?.clientStatus || 'onboarding');
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [emailValue, setEmailValue] = useState('');
 
   const { displayName: currentUser, userData, isRestricted } = useAuth();
 
@@ -52,6 +54,13 @@ const ClientDetails = ({ department }) => {
     if (docSnap.exists()) {
       setClient({ id: docSnap.id, ...docSnap.data() });
     }
+  };
+
+  const handleSaveEmail = async () => {
+    const trimmed = emailValue.trim();
+    await updateDoc(doc(db, "leads", id), { email: trimmed || null });
+    setEditingEmail(false);
+    refreshClient();
   };
 
   const handleLogContact = async (data) => {
@@ -303,16 +312,62 @@ const ClientDetails = ({ department }) => {
                 </div>
               </div>
               
-              {client.email && (
+              {client.email || editingEmail ? (
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-stone-100 flex items-center justify-center">
+                  <div className="w-9 h-9 rounded-lg bg-stone-100 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-4 h-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-stone-400">Email</p>
+                    {editingEmail ? (
+                      <div className="flex items-center gap-2 mt-1">
+                        <input
+                          type="email"
+                          value={emailValue}
+                          onChange={(e) => setEmailValue(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleSaveEmail(); if (e.key === 'Escape') setEditingEmail(false); }}
+                          className="flex-1 px-2 py-1 border border-stone-300 rounded text-sm focus:outline-none focus:border-stone-500"
+                          autoFocus
+                          placeholder="email@example.com"
+                        />
+                        <button onClick={handleSaveEmail} className="p-1 text-emerald-600 hover:text-emerald-700" title="Zapisz">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                        </button>
+                        <button onClick={() => setEditingEmail(false)} className="p-1 text-stone-400 hover:text-stone-600" title="Anuluj">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <a href={`mailto:${client.email}`} className="text-stone-900 font-medium">{client.email}</a>
+                        <button
+                          onClick={() => { setEmailValue(client.email || ''); setEditingEmail(true); }}
+                          className="p-1 text-stone-400 hover:text-stone-700 transition-colors"
+                          title="Edytuj email"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-stone-100 flex items-center justify-center flex-shrink-0">
                     <svg className="w-4 h-4 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
                   </div>
                   <div>
                     <p className="text-xs text-stone-400">Email</p>
-                    <a href={`mailto:${client.email}`} className="text-stone-900 font-medium">{client.email}</a>
+                    <button
+                      onClick={() => { setEmailValue(''); setEditingEmail(true); }}
+                      className="text-stone-400 hover:text-stone-700 text-sm mt-1 transition-colors"
+                    >
+                      + Dodaj email
+                    </button>
                   </div>
                 </div>
               )}

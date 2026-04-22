@@ -835,3 +835,314 @@ exports.completeInviteRegistration = functions
             );
         }
     });
+
+
+// ============================================================
+// FUNKCJA 5: Meta Lead Ads Webhook (NOWA)
+// ============================================================
+
+// Token weryfikacyjny — wpisz ten sam w panelu Meta Developer
+const META_VERIFY_TOKEN = "kwzd_meta_webhook_2026";
+
+// Helper: pobiera pełne dane leada z Meta Graph API
+async function fetchMetaLeadData(leadgenId) {
+    try {
+        const accessToken = process.env.META_PAGE_ACCESS_TOKEN;
+        if (!accessToken) {
+            console.error("Brak META_PAGE_ACCESS_TOKEN!");
+            return null;
+        }
+
+        const url = `https://graph.facebook.com/v25.0/${leadgenId}?access_token=${accessToken}`;
+        const response = await fetch(url);
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`Graph API error ${response.status}:`, errorText);
+            return null;
+        }
+
+        const data = await response.json();
+        console.log("Dane leada z Meta:", JSON.stringify(data));
+
+        // Parsuj pola formularza do prostego obiektu
+        const fields = {};
+        for (const item of data.field_data || []) {
+            fields[item.name] = item.values?.[0] || "";
+        }
+
+        // Złóż imię i nazwisko
+        let name = fields.full_name || "";
+        if (!name && (fields.first_name || fields.last_name)) {
+            name = `${fields.first_name || ""} ${fields.last_name || ""}`.trim();
+        }
+
+        return {
+            name,
+            phone: fields.phone_number || "",
+            email: fields.email || "",
+            created_time: data.created_time || null,
+            customAnswers: fields,
+        };
+    } catch (error) {
+        console.error("Błąd fetchMetaLeadData:", error);
+        return null;
+    }
+}
+
+exports.metaLeadWebhook = functions
+    .region("us-central1")
+    .runWith({
+        secrets: ["META_PAGE_ACCESS_TOKEN"],
+        memory: "256MB",
+        timeoutSeconds: 30,
+    })
+    .https.onRequest(async (req, res) => {
+
+        // ---- GET = Meta weryfikuje webhook ----
+        if (req.method === "GET") {
+            const mode = req.query["hub.mode"];
+            const token = req.query["hub.verify_token"];
+            const challenge = req.query["hub.challenge"];
+
+            if (mode === "subscribe" && token === META_VERIFY_TOKEN) {
+                console.log("Meta webhook zweryfikowany!");
+                return res.status(200).send(challenge);
+            }
+            console.warn("Nieudana weryfikacja webhooka:", { mode, token });
+            return res.status(403).send("Forbidden");
+        }
+
+        // ---- POST = nowy lead z formularza ----
+        if (req.method === "POST") {
+            const body = req.body;
+
+            if (body.object !== "page") {
+                return res.status(404).send("Not a page event");
+            }
+
+            // Odpowiedz Meta natychmiast — masz max 20s
+            res.status(200).send("EVENT_RECEIVED");
+
+            // Przetwarzaj leady w tle
+            try {
+                for (const entry of body.entry || []) {
+                    for (const change of entry.changes || []) {
+                        if (change.field !== "leadgen") continue;
+
+                        const leadgenId = change.value.leadgen_id;
+                        const formId = change.value.form_id;
+                        const pageId = change.value.page_id;
+                        const createdTime = change.value.created_time;
+
+                        console.log(`>>> Nowy lead! leadgen_id=${leadgenId}, form_id=${formId}, page_id=${pageId}`);
+
+                        // Pobierz pełne dane leada z Graph API
+                        const leadData = await fetchMetaLeadData(leadgenId);
+
+                        if (!leadData) {
+                            console.error(`Nie udało się pobrać danych dla leada ${leadgenId}`);
+                            // Zapisz surowe dane żeby nie stracić leada
+                            await db.collection("leadsQueue").add({
+                                name: "",
+                                phone: "",
+                                email: "",
+                                source: "Meta Ads",
+                                notes: `Formularz: ${formId} | Nie udało się pobrać danych z Graph API`,
+                                metaLeadId: String(leadgenId),
+                                metaCreatedTime: createdTime ? new Date(createdTime * 1000).toISOString() : null,
+                                formAnswer: null,
+                                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                            });
+                            continue;
+                        }
+
+                        // Wrzuć do leadsQueue → triggeruje processLeadFromQueue (Funkcja 3)
+                        await db.collection("leadsQueue").add({
+                            name: leadData.name,
+                            phone: leadData.phone,
+                            email: leadData.email,
+                            source: "Meta Ads",
+                            notes: `Formularz: ${formId}`,
+                            metaLeadId: String(leadgenId),
+                            metaCreatedTime: leadData.created_time || null,
+                            formAnswer: leadData.customAnswers || null,
+                            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                        });
+
+                        console.log(`Lead ${leadgenId} (${leadData.name}) dodany do kolejki`);
+                    }
+                }
+            } catch (error) {
+                // Logujemy ale NIE zwracamy błędu — już wysłaliśmy 200
+                console.error("Błąd przetwarzania webhooka:", error);
+            }
+
+            return;
+        }
+
+        return res.status(405).send("Method not allowed");
+    });
+
+// ============================================================
+// FUNKCJA 6: Endpoint HTTP dla Google Sheets (leady z arkusza)
+// ============================================================
+
+// Token autoryzacyjny - ten sam wpisz w Apps Script (Script Properties)
+const SHEETS_AUTH_TOKEN = "kwzd_sheets_2026_a9f3k2mxQ7pL";
+
+exports.addLeadFromSheet = functions
+    .region("us-central1")
+    .runWith({
+        memory: "256MB",
+        timeoutSeconds: 30,
+    })
+    .https.onRequest(async (req, res) => {
+        // CORS
+        res.set("Access-Control-Allow-Origin", "*");
+        res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+        res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+        if (req.method === "OPTIONS") {
+            return res.status(204).send("");
+        }
+
+        if (req.method !== "POST") {
+            return res.status(405).json({ error: "Method not allowed" });
+        }
+
+        // Auth
+        const authHeader = req.get("Authorization") || "";
+        const token = authHeader.replace("Bearer ", "").trim();
+
+        if (token !== SHEETS_AUTH_TOKEN) {
+            console.warn("Nieprawidłowy token Sheets:", token.substring(0, 10));
+            return res.status(401).json({ error: "Unauthorized" });
+        }
+
+        try {
+            const data = req.body || {};
+            const { name, phone, email, source, formName, campaignName, customAnswers, sheetRowId } = data;
+
+            // Walidacja minimum danych
+            if (!phone && !email) {
+                return res.status(400).json({ error: "Brak phone i email" });
+            }
+
+            // Normalizacja telefonu (dodaj + jeśli zaczyna się od 48)
+            let normalizedPhone = (phone || "").toString().trim().replace(/\s+/g, "");
+            if (normalizedPhone && !normalizedPhone.startsWith("+")) {
+                if (normalizedPhone.startsWith("48") && normalizedPhone.length === 11) {
+                    normalizedPhone = "+" + normalizedPhone;
+                } else if (normalizedPhone.length === 9) {
+                    normalizedPhone = "+48" + normalizedPhone;
+                }
+            }
+
+            // Dedup po telefonie lub emailu w kolekcji leads
+            if (normalizedPhone) {
+                const existingByPhone = await db
+                    .collection("leads")
+                    .where("phone", "==", normalizedPhone)
+                    .limit(1)
+                    .get();
+
+                if (!existingByPhone.empty) {
+                    console.log(`Duplikat (telefon): ${normalizedPhone}`);
+                    return res.status(200).json({
+                        success: true,
+                        duplicate: true,
+                        message: "Lead już istnieje (telefon)",
+                        existingId: existingByPhone.docs[0].id,
+                    });
+                }
+            }
+
+            if (email) {
+                const existingByEmail = await db
+                    .collection("leads")
+                    .where("email", "==", email.toLowerCase().trim())
+                    .limit(1)
+                    .get();
+
+                if (!existingByEmail.empty) {
+                    console.log(`Duplikat (email): ${email}`);
+                    return res.status(200).json({
+                        success: true,
+                        duplicate: true,
+                        message: "Lead już istnieje (email)",
+                        existingId: existingByEmail.docs[0].id,
+                    });
+                }
+            }
+
+            // Zbuduj czytelne notes z customAnswers
+            let notesText = "";
+            if (customAnswers && typeof customAnswers === "object") {
+                const parts = [];
+                const debt = customAnswers["jaka_jest_przybliżona_suma_twoich_wszystkich_zadłużeń?"]
+                    || customAnswers["jaka_jest_przybliżona_suma_twoich_wszystkich_zadłużeń"]
+                    || customAnswers.debtAmount;
+                const bailiff = customAnswers["czy_masz_zajęcia_komornicze?"]
+                    || customAnswers["czy_masz_zajęcia_komornicze"]
+                    || customAnswers.bailiff;
+
+                if (debt) parts.push(`Przybliżona kwota zadłużeń: ${debt}`);
+                if (bailiff) parts.push(`Zajęcia komornicze: ${bailiff}`);
+
+                // Dorzuć pozostałe pola które nie zostały użyte
+                for (const [key, value] of Object.entries(customAnswers)) {
+                    if (!value) continue;
+                    if (key.includes("zadłużeń") || key.includes("komornicze") || key === "debtAmount" || key === "bailiff") continue;
+                    parts.push(`${key}: ${value}`);
+                }
+
+                notesText = parts.join(" ");
+            }
+
+            // Normalizuj klucze customAnswers (lowercase, bez znaków zapytania)
+            const normalizedAnswers = {};
+            if (customAnswers && typeof customAnswers === "object") {
+                for (const [key, value] of Object.entries(customAnswers)) {
+                    if (!value) continue;
+                    // Usuń znaki zapytania z końca i ewentualne spacje
+                    const cleanKey = key.trim().replace(/\?+$/, "");
+                    normalizedAnswers[cleanKey] = value.toString();
+                }
+            }
+
+            // Wrzuć do leadsQueue - trigger processLeadFromQueue przerobi to na lead
+            await db.collection("leadsQueue").add({
+                name: (name || "").toString().trim(),
+                phone: normalizedPhone,
+                email: (email || "").toLowerCase().trim(),
+                source: source || campaignName || "Google Sheets Import",
+                notes: "",  // pusto - UI renderuje karty z formAnswer
+                metaLeadId: null,
+                metaCreatedTime: null,
+                formAnswer: Object.keys(normalizedAnswers).length > 0 ? normalizedAnswers : null,
+                sheetRowId: sheetRowId || null,
+                importedFrom: "google_sheets",
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+
+            console.log(`Lead z arkusza dodany do kolejki: ${name || email || phone}`);
+
+            return res.status(200).json({
+                success: true,
+                duplicate: false,
+                message: "Lead dodany do kolejki",
+            });
+        } catch (error) {
+            console.error("Błąd addLeadFromSheet:", error);
+            return res.status(500).json({
+                error: "Internal error",
+                message: error.message,
+            });
+        }
+    });
+// ============================================================
+// MODU� PHONE (Twilio Voice)  odseparowany w ./phone/
+// ============================================================
+Object.assign(exports, require('./phone'));
+

@@ -269,6 +269,8 @@ export const timeSinceLead = (dateInput) => {
     ? new Date(dateInput.seconds * 1000)
     : new Date(dateInput);
 
+  if (isNaN(date)) return { value: 0, unit: 'min', full: '—', color: 'stone' };
+
   const now = new Date();
   const diffMs = now - date;
   const diffMins = Math.floor(diffMs / 60000);
