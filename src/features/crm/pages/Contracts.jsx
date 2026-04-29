@@ -1186,7 +1186,7 @@ const Contracts = ({ department }) => {
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-6 space-y-6">
                 {clients.length > 0 && (
                   <div>
                     <label className="block text-sm font-medium text-stone-700 mb-2">Wybierz istniejącego klienta</label>
@@ -1665,7 +1665,7 @@ const Contracts = ({ department }) => {
                 </div>
               )}
 
-              <div className="flex-1 overflow-y-auto">
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
                 <div className="p-6 space-y-8">
                   {/* 1. UMOWA GŁÓWNA */}
                   <div>

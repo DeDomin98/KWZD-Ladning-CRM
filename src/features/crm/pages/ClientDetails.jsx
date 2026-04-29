@@ -17,6 +17,9 @@ const addMonths = (dateStr, months) => {
 };
 import { deleteFile } from "../../../lib/storage";
 import Timeline from "../components/Timeline";
+import CommunicationHistory from "../../../phone/CommunicationHistory";
+import CallButton from "../../../phone/CallButton";
+import SmsButton from "../../../phone/SmsButton";
 import FileUploader from "../components/FileUploader";
 import { useAuth } from "../../../hooks/useAuth";
 
@@ -308,7 +311,15 @@ const ClientDetails = ({ department }) => {
                 </div>
                 <div>
                   <p className="text-xs text-stone-400">Telefon</p>
-                  <a href={`tel:${client.phone}`} className="text-stone-900 font-medium">{client.phone}</a>
+                  <div className="flex items-center gap-2">
+                    <a href={`tel:${client.phone}`} className="text-stone-900 font-medium">{client.phone}</a>
+                    {client.phone && (
+                      <>
+                        <CallButton phone={client.phone} name={client.full_name || client.name} variant="icon" />
+                        <SmsButton phone={client.phone} name={client.full_name || client.name} variant="icon" />
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
               
@@ -542,6 +553,13 @@ const ClientDetails = ({ department }) => {
                   </div>
                 )}
               />
+            )}
+
+            {activeTab === 'historia' && (
+              <div className="mt-6">
+                <h3 className="text-sm font-semibold text-stone-700 mb-3">Komunikacja telefoniczna</h3>
+                <CommunicationHistory phone={client.phone} />
+              </div>
             )}
 
             {activeTab === 'platnosci' && (

@@ -33,30 +33,50 @@ exports.incomingCall = functions
             const snapshot = await db
                 .collection("agents")
                 .where("online", "==", true)
-                .limit(10)
+                .limit(20)
                 .get();
 
             const allAgents = snapshot.docs.map((d) => ({
                 id: d.id,
                 online: d.data().online,
                 forwardCalls: d.data().forwardCalls === true,
+                forwardNumber: d.data().forwardNumber || "",
             }));
             console.log("incomingCall agents online:", allAgents);
 
-            // Szukamy agenta online który NIE ma ustawionego przekierowania na komórkę
-            const browserAgent = snapshot.docs.find((d) => d.data().forwardCalls !== true);
+            // Agenci odbierający w przeglądarce (brak przekierowania)
+            const browserAgents = snapshot.docs.filter((d) => d.data().forwardCalls !== true);
+            // Agenci z przekierowaniem na komórkę – każdy musi mieć WŁASNY forwardNumber w E.164
+            const cellAgents = snapshot.docs.filter((d) => {
+                const data = d.data();
+                return data.forwardCalls === true && /^\+\d{8,15}$/.test(data.forwardNumber || "");
+            });
 
-            if (browserAgent) {
-                // Agent online i odbiera w przeglądarce
-                const identity = `agent_${browserAgent.id}`;
-                console.log("incomingCall -> Client:", identity);
+            const hasAnyTarget = browserAgents.length > 0 || cellAgents.length > 0;
 
+            if (hasAnyTarget) {
+                // Równoległy dzwonek: WSZYSTKIE przeglądarki + WSZYSTKIE komórki naraz.
+                // Pierwszy kto odbierze przejmuje rozmowę, reszta zostaje rozłączona.
+                // callerId: gdy dzwonimy też na PSTN (komórki) MUSI być nasz numer Twilio
+                // (operator nie pozwoli wysłać CLI klienta). Dla samego <Client> lepiej From.
+                const callerId = cellAgents.length > 0
+                    ? firmNumber
+                    : (req.body.From || firmNumber);
                 const dial = twiml.dial({
-                    callerId: req.body.From || undefined,
+                    callerId,
                     timeout: 30,
                     answerOnBridge: true,
                 });
-                dial.client(identity);
+                browserAgents.forEach((d) => {
+                    const identity = `agent_${d.id}`;
+                    console.log("incomingCall -> Client (parallel):", identity);
+                    dial.client(identity);
+                });
+                cellAgents.forEach((d) => {
+                    const num = d.data().forwardNumber;
+                    console.log("incomingCall -> Number (parallel):", d.id, num);
+                    dial.number(num);
+                });
             } else if (fallbackNumber) {
                 console.log("incomingCall -> fallback PSTN:", fallbackNumber);
                 const dial = twiml.dial({ callerId: firmNumber, timeout: 30 });

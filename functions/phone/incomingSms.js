@@ -33,6 +33,37 @@ exports.incomingSms = functions
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
             }, { merge: true });
 
+            // Auto-log do contactHistory leada / klienta (jeśli rozpoznamy numer)
+            try {
+                const digits = from.replace(/\D/g, "").slice(-9);
+                if (digits) {
+                    const leadsSnap = await db.collection("leads").get();
+                    const match = leadsSnap.docs.find((d) => {
+                        const p = String(d.data().phone || "").replace(/\D/g, "").slice(-9);
+                        return p && p === digits;
+                    });
+                    if (match) {
+                        await match.ref.update({
+                            contactHistory: admin.firestore.FieldValue.arrayUnion({
+                                date: new Date().toISOString(),
+                                author: "System (SMS)",
+                                result: "sms_otrzymany",
+                                notes: text,
+                                source: "sms",
+                                smsDirection: "inbound",
+                                smsNumber: from,
+                                smsBody: text,
+                                smsSid: messageSid,
+                            }),
+                            lastContactDate: admin.firestore.FieldValue.serverTimestamp(),
+                            lastContactResult: "sms_otrzymany",
+                        });
+                    }
+                }
+            } catch (logErr) {
+                console.warn("phone/incomingSms autoLog error:", logErr.message);
+            }
+
             // Odpowiedź TwiML – pusta (brak auto-reply)
             res.set("Content-Type", "text/xml");
             return res.status(200).send(`<?xml version="1.0" encoding="UTF-8"?><Response></Response>`);

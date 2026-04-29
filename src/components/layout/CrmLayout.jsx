@@ -7,6 +7,8 @@ import { daysUntil, timeAgo, DEPARTMENTS } from "../../lib/utils";
 import { useAuth } from "../../hooks/useAuth";
 import ThemeToggle from "../../features/crm/components/ThemeToggle";
 import ChatPanel from "../../features/crm/components/ChatPanel";
+import { PhoneProvider } from "../../phone/PhoneContext";
+import PhoneController from "../../phone/PhoneController";
 
 const NOTIFICATION_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
 
@@ -605,4 +607,11 @@ const CrmLayout = ({ department }) => {
   );
 };
 
-export default CrmLayout;
+export default function CrmLayoutWrapped(props) {
+  return (
+    <PhoneProvider>
+      <CrmLayout {...props} />
+      <PhoneController />
+    </PhoneProvider>
+  );
+}

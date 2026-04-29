@@ -31,23 +31,59 @@ exports.sendSms = functions
 
         try {
             const client = twilio(cfg.accountSid, cfg.authToken);
+            const toClean = String(to).trim();
+            const bodyClean = String(body).trim();
             const message = await client.messages.create({
-                to: String(to).trim(),
+                to: toClean,
                 from: cfg.phoneNumber,
-                body: String(body).trim(),
+                body: bodyClean,
             });
 
             // Zapisz do Firestore
             await db.collection("sms").doc(message.sid).set({
                 messageSid: message.sid,
                 from: cfg.phoneNumber,
-                to: String(to).trim(),
-                body: String(body).trim(),
+                to: toClean,
+                body: bodyClean,
                 direction: "outbound",
                 status: message.status,
                 agentId: user.uid,
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
             });
+
+            // Auto-log do contactHistory leada / klienta (jeśli rozpoznamy numer).
+            // Dzięki temu agent NIE musi ręcznie dopisywać notatki – treść SMS-a
+            // od razu trafia do historii kontaktu na karcie leada / klienta.
+            try {
+                const digits = toClean.replace(/\D/g, "").slice(-9);
+                if (digits) {
+                    const leadsSnap = await db.collection("leads").get();
+                    const match = leadsSnap.docs.find((d) => {
+                        const p = String(d.data().phone || "").replace(/\D/g, "").slice(-9);
+                        return p && p === digits;
+                    });
+                    if (match) {
+                        const agentName = user.name || user.email || "Agent";
+                        await match.ref.update({
+                            contactHistory: admin.firestore.FieldValue.arrayUnion({
+                                date: new Date().toISOString(),
+                                author: agentName,
+                                result: "sms_wyslany",
+                                notes: bodyClean,
+                                source: "sms",
+                                smsDirection: "outbound",
+                                smsNumber: toClean,
+                                smsBody: bodyClean,
+                                smsSid: message.sid,
+                            }),
+                            lastContactDate: admin.firestore.FieldValue.serverTimestamp(),
+                            lastContactResult: "sms_wyslany",
+                        });
+                    }
+                }
+            } catch (logErr) {
+                console.warn("phone/sendSms autoLog error:", logErr.message);
+            }
 
             return res.status(200).json({ sid: message.sid, status: message.status });
         } catch (err) {

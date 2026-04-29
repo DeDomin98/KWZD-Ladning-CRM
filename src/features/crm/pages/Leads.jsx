@@ -4,6 +4,8 @@ import { db } from "../../../lib/firebase";
 import { formatPLN, timeSinceLead, LEAD_STATUSES, SERVICE_TYPES, DEPARTMENTS } from "../../../lib/utils";
 import { useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom';
 import { useAuth } from "../../../hooks/useAuth";
+import CallButton from "../../../phone/CallButton";
+import SmsButton from "../../../phone/SmsButton";
 
 const Leads = () => {
   const [leads, setLeads] = useState([]);
@@ -586,7 +588,15 @@ const Leads = () => {
                     </td>
 
                     <td className="px-6 py-4 overflow-hidden">
-                      <p className="text-stone-900 truncate" title={lead.phone || undefined}>{lead.phone || '—'}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-stone-900 truncate flex-1 min-w-0" title={lead.phone || undefined}>{lead.phone || '—'}</p>
+                        {lead.phone && (
+                          <span onClick={(e) => e.stopPropagation()}>
+                            <CallButton phone={lead.phone} name={lead.name} variant="icon" size={14} />
+                            <SmsButton phone={lead.phone} name={lead.name} variant="icon" size={14} />
+                          </span>
+                        )}
+                      </div>
                       {lead.email && (
                         <p className="text-sm text-stone-500 truncate" title={lead.email}>{lead.email}</p>
                       )}

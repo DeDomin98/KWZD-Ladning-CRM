@@ -4,6 +4,9 @@ import { doc, getDoc, updateDoc, arrayUnion, addDoc, collection, serverTimestamp
 import { db } from "../../../lib/firebase.js";
 import { formatPLN, formatDate, formatDateTime, timeAgo, daysSince, addDays, LEAD_STATUSES, SERVICE_TYPES, CONTACT_RESULTS } from "../../../lib/utils";
 import { useAuth } from "../../../hooks/useAuth";
+import CallButton from "../../../phone/CallButton";
+import SmsButton from "../../../phone/SmsButton";
+import CommunicationHistory from "../../../phone/CommunicationHistory";
 
 const LeadDetails = () => {
   const { id } = useParams();
@@ -392,7 +395,21 @@ const LeadDetails = () => {
               <div className="space-y-4">
                 <div>
                   <label className="text-xs font-medium text-stone-400 uppercase tracking-wide">Telefon</label>
-                  <p className="text-lg font-medium text-stone-900 mt-1">{lead.phone || '—'}</p>
+                  <div className="flex items-center gap-3 mt-1">
+                    <p className="text-lg font-medium text-stone-900">{lead.phone || '—'}</p>
+                    {lead.phone && (
+                      <>
+                        <CallButton
+                          phone={lead.phone}
+                          name={lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim() || lead.name}
+                        />
+                        <SmsButton
+                          phone={lead.phone}
+                          name={lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim() || lead.name}
+                        />
+                      </>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label className="text-xs font-medium text-stone-400 uppercase tracking-wide">Email</label>
@@ -581,6 +598,11 @@ const LeadDetails = () => {
                     ))}
                   </div>
                 )}
+
+                <div className="mt-8 pt-6 border-t border-stone-200">
+                  <h3 className="font-semibold text-stone-900 mb-3">Komunikacja telefoniczna</h3>
+                  <CommunicationHistory phone={lead.phone} />
+                </div>
               </div>
             </div>
           </div>

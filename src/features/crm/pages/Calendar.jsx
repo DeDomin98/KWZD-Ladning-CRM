@@ -5,6 +5,29 @@ import { formatDate, getDaysInMonth, getFirstDayOfMonth, addDays, daysUntil } fr
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from "../../../hooks/useAuth";
 
+// ===== Date helpers (LOCAL time, not UTC) =====
+// Zwraca YYYY-MM-DD w lokalnym czasie (Polski). Naprawia bug off-by-one przy 22:00-2:00.
+const toLocalDateStr = (date) => {
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d)) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+const reminderDate = (r) => r?.date?.seconds ? new Date(r.date.seconds * 1000) : new Date(r?.date);
+const startOfWeek = (date) => {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  // Pon = 0, Nd = 6
+  const dow = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - dow);
+  return d;
+};
+const addDaysLocal = (date, n) => {
+  const d = new Date(date);
+  d.setDate(d.getDate() + n);
+  return d;
+};
+
 // ===== Icons =====
 const PhoneIcon = ({ className = 'w-4 h-4' }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
@@ -200,31 +223,392 @@ const DayAgenda = ({ dateStr, label, contacts, clientReminders, reminders, depar
           );
         })}
 
-        {reminders.map(r => (
-          <div
-            key={`r-${r.id}`}
-            className={`flex items-center gap-3 px-4 py-3 bg-white rounded-xl border border-stone-100 transition-all ${r.isCompleted ? 'opacity-50' : 'hover:border-violet-200 hover:shadow-sm'}`}
-          >
-            <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center text-violet-600 flex-shrink-0">
-              <BellIcon className="w-4 h-4" />
+        {reminders.map(r => {
+          const rDate = r.date?.seconds ? new Date(r.date.seconds * 1000) : new Date(r.date);
+          const timeStr = !isNaN(rDate) ? rDate.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' }) : '';
+          const isCall = r.type === 'rozmowa';
+          const isMeeting = r.type === 'spotkanie';
+          const iconWrap = isCall
+            ? 'bg-amber-100 text-amber-600'
+            : isMeeting
+              ? 'bg-emerald-100 text-emerald-600'
+              : 'bg-violet-100 text-violet-600';
+          const Ic = isCall ? PhoneIcon : isMeeting ? CheckIcon : BellIcon;
+          const inner = (
+            <>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${iconWrap}`}>
+                <Ic className="w-4 h-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  {timeStr && (
+                    <span className="text-[11px] font-mono font-semibold text-stone-700 bg-stone-100 px-1.5 py-0.5 rounded flex-shrink-0">
+                      {timeStr}
+                    </span>
+                  )}
+                  <p className={`text-sm font-medium truncate ${r.isCompleted ? 'text-stone-400 line-through' : 'text-stone-900'}`}>{r.title}</p>
+                </div>
+                <div className="flex items-center gap-2 mt-0.5">
+                  {r.leadName && (
+                    <span className="text-[11px] text-stone-500 truncate">{r.leadName}</span>
+                  )}
+                  {r.leadPhone && (
+                    <span className="text-[11px] text-stone-500 font-mono">• {r.leadPhone}</span>
+                  )}
+                  {!r.leadName && (
+                    <span className="text-[11px] text-stone-400">
+                      {r.isCompleted ? 'Wykonane' : 'Przypomnienie'}{r.createdBy ? ` — ${r.createdBy}` : ''}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </>
+          );
+
+          return (
+            <div
+              key={`r-${r.id}`}
+              className={`flex items-center gap-3 px-4 py-3 bg-white rounded-xl border border-stone-100 transition-all ${r.isCompleted ? 'opacity-50' : 'hover:border-violet-200 hover:shadow-sm'}`}
+            >
+              {r.leadId ? (
+                <Link
+                  to={`/crm/${department}/leady/${r.leadId}`}
+                  state={{ from: 'calendar' }}
+                  className="flex items-center gap-3 flex-1 min-w-0"
+                >
+                  {inner}
+                </Link>
+              ) : (
+                <div className="flex items-center gap-3 flex-1 min-w-0">{inner}</div>
+              )}
+              {!r.isCompleted && (
+                <button
+                  onClick={() => onCompleteReminder(r.id, r)}
+                  className="p-2 hover:bg-emerald-50 rounded-lg transition-colors group flex-shrink-0"
+                  title="Oznacz jako wykonane"
+                >
+                  <CheckIcon className="w-4 h-4 text-stone-300 group-hover:text-emerald-600" />
+                </button>
+              )}
             </div>
-            <div className="flex-1 min-w-0">
-              <p className={`text-sm font-medium truncate ${r.isCompleted ? 'text-stone-400 line-through' : 'text-stone-900'}`}>{r.title}</p>
-              <p className="text-[11px] text-stone-400">
-                {r.isCompleted ? 'Wykonane' : 'Przypomnienie'}{r.createdBy ? ` — ${r.createdBy}` : ''}
-              </p>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// ===== Week View — siatka 7 dni × godziny =====
+const WEEK_START_HOUR = 9;
+const WEEK_END_HOUR = 20; // ekskluzywnie — pokazujemy 9:00–19:00 (11 wierszy)
+const HOUR_PX = 44; // wysokosc 1h w pikselach (kompaktowa, aby zmiescic na ekranie)
+
+// snap minutow do 15
+const snapMinutes = (m) => Math.round(m / 15) * 15;
+
+const WeekView = ({
+  weekStart,
+  setWeekStart,
+  getEventsForDateStr,
+  isContactedOnDate,
+  handleCompleteReminder,
+  handleDismissContact,
+  department,
+  onAddAt,
+}) => {
+  const days = useMemo(() => {
+    return Array.from({ length: 7 }, (_, i) => addDaysLocal(weekStart, i));
+  }, [weekStart]);
+  const todayStr = toLocalDateStr(new Date());
+  const hours = useMemo(() => {
+    const out = [];
+    for (let h = WEEK_START_HOUR; h < WEEK_END_HOUR; h++) out.push(h);
+    return out;
+  }, []);
+
+  const weekLabel = `${days[0].getDate()} ${days[0].toLocaleDateString('pl-PL', { month: 'short' })} – ${days[6].getDate()} ${days[6].toLocaleDateString('pl-PL', { month: 'short', year: 'numeric' })}`;
+
+  const goPrev = () => setWeekStart(addDaysLocal(weekStart, -7));
+  const goNext = () => setWeekStart(addDaysLocal(weekStart, 7));
+  const goToday = () => setWeekStart(startOfWeek(new Date()));
+
+  // bieżący wskaźnik czasu (czerwona kreska)
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(t);
+  }, []);
+  const nowHourFloat = now.getHours() + now.getMinutes() / 60;
+  const nowVisible = nowHourFloat >= WEEK_START_HOUR && nowHourFloat < WEEK_END_HOUR;
+  const nowTopPx = (nowHourFloat - WEEK_START_HOUR) * HOUR_PX;
+  const nowDayIdx = days.findIndex(d => toLocalDateStr(d) === toLocalDateStr(now));
+
+  // ===== Drag & Drop: przesuwanie kafelkow miedzy dniami/godzinami =====
+  const [draggingId, setDraggingId] = useState(null);
+  const [dragOver, setDragOver] = useState(null); // { dayIdx, topPx }
+
+  const handleDragStart = (e, reminderId) => {
+    setDraggingId(reminderId);
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', reminderId); } catch { /* niektore przegladarki */ }
+  };
+  const handleDragEnd = () => {
+    setDraggingId(null);
+    setDragOver(null);
+  };
+  const computeDropDate = (e, dayDate) => {
+    const colEl = e.currentTarget;
+    const rect = colEl.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const hourFloat = WEEK_START_HOUR + y / HOUR_PX;
+    let hour = Math.floor(hourFloat);
+    let minute = snapMinutes((hourFloat - hour) * 60);
+    if (minute === 60) { hour += 1; minute = 0; }
+    if (hour < WEEK_START_HOUR) { hour = WEEK_START_HOUR; minute = 0; }
+    if (hour >= WEEK_END_HOUR) { hour = WEEK_END_HOUR - 1; minute = 45; }
+    const date = new Date(dayDate);
+    date.setHours(hour, minute, 0, 0);
+    return date;
+  };
+  const handleDragOverDay = (e, dayIdx, dayDate) => {
+    if (!draggingId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = e.currentTarget.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const hourFloat = WEEK_START_HOUR + y / HOUR_PX;
+    let hour = Math.floor(hourFloat);
+    let minute = snapMinutes((hourFloat - hour) * 60);
+    if (minute === 60) { hour += 1; minute = 0; }
+    const topPx = ((hour - WEEK_START_HOUR) + minute / 60) * HOUR_PX;
+    setDragOver({ dayIdx, topPx });
+  };
+  const handleDropOnDay = async (e, dayDate) => {
+    if (!draggingId) return;
+    e.preventDefault();
+    const newDate = computeDropDate(e, dayDate);
+    const id = draggingId;
+    setDraggingId(null);
+    setDragOver(null);
+    try {
+      await updateDoc(doc(db, 'reminders', id), { date: newDate.toISOString() });
+    } catch (err) {
+      console.error('Nie udalo sie przeniesc przypomnienia:', err);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
+      {/* Pasek nawigacji */}
+      <div className="px-4 sm:px-6 py-3 border-b border-stone-200 flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <button onClick={goPrev} className="p-2 hover:bg-stone-100 rounded-lg transition-colors" title="Poprzedni tydzień">
+            <svg className="w-4 h-4 text-stone-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+          </button>
+          <button onClick={goToday} className="px-3 py-1.5 text-xs font-medium text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-lg transition-colors">Dziś</button>
+          <button onClick={goNext} className="p-2 hover:bg-stone-100 rounded-lg transition-colors" title="Następny tydzień">
+            <svg className="w-4 h-4 text-stone-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+          </button>
+        </div>
+        <h2 className="text-sm sm:text-base font-semibold text-stone-900 capitalize">{weekLabel}</h2>
+        <div className="text-[11px] text-stone-400 hidden sm:block">Czas: Europa/Warszawa</div>
+      </div>
+
+      {/* Nagłówek dni */}
+      <div className="grid grid-cols-[48px_repeat(7,minmax(0,1fr))] border-b border-stone-200 bg-stone-50 sticky top-0 z-20">
+        <div />
+        {days.map((d, i) => {
+          const dStr = toLocalDateStr(d);
+          const isToday = dStr === todayStr;
+          const ev = getEventsForDateStr(dStr);
+          const total = ev.contacts.length + ev.clientReminders.length + ev.reminders.filter(r => !r.isCompleted).length;
+          const dayShort = d.toLocaleDateString('pl-PL', { weekday: 'short' });
+          return (
+            <div key={i} className={`px-2 py-2 text-center border-l border-stone-200 ${isToday ? 'bg-blue-50' : ''}`}>
+              <div className={`text-[11px] uppercase font-semibold ${isToday ? 'text-blue-600' : 'text-stone-400'}`}>{dayShort}</div>
+              <div className={`text-base font-bold ${isToday ? 'text-blue-700' : 'text-stone-900'}`}>{d.getDate()}</div>
+              {total > 0 && (
+                <div className="text-[10px] text-stone-500 mt-0.5">{total} {total === 1 ? 'zad.' : total < 5 ? 'zad.' : 'zad.'}</div>
+              )}
             </div>
-            {!r.isCompleted && (
-              <button
-                onClick={() => onCompleteReminder(r.id, r)}
-                className="p-2 hover:bg-emerald-50 rounded-lg transition-colors group"
-                title="Oznacz jako wykonane"
-              >
-                <CheckIcon className="w-4 h-4 text-stone-300 group-hover:text-emerald-600" />
-              </button>
-            )}
+          );
+        })}
+      </div>
+
+      {/* Siatka godzin */}
+      <div className="overflow-y-auto max-h-[calc(100vh-240px)] relative">
+        <div className="grid grid-cols-[48px_repeat(7,minmax(0,1fr))] relative" style={{ minHeight: hours.length * HOUR_PX }}>
+          {/* Kolumna godzin */}
+          <div className="relative">
+            {hours.map(h => (
+              <div key={h} className="border-b border-stone-100 text-[10px] text-stone-400 pr-1 text-right pt-0.5" style={{ height: HOUR_PX }}>
+                {String(h).padStart(2, '0')}:00
+              </div>
+            ))}
           </div>
-        ))}
+
+          {/* Kolumny dni */}
+          {days.map((d, dayIdx) => {
+            const dStr = toLocalDateStr(d);
+            const ev = getEventsForDateStr(dStr);
+            const isToday = dStr === todayStr;
+
+            // Wszystkie wpisy z czasem (rozmowy/przypomnienia) — w tym wykonane (jako wyszarzone)
+            const items = [];
+
+            ev.reminders.forEach(r => {
+              const rd = reminderDate(r);
+              if (isNaN(rd)) return;
+              const hourFloat = rd.getHours() + rd.getMinutes() / 60;
+              if (hourFloat < WEEK_START_HOUR || hourFloat >= WEEK_END_HOUR) return;
+              const isCall = r.type === 'rozmowa';
+              const isMeeting = r.type === 'spotkanie';
+              const completed = !!r.isCompleted;
+              const tone = completed
+                ? { bg: 'bg-stone-100 hover:bg-stone-200 border-stone-300', text: 'text-stone-500 line-through', accent: 'bg-stone-400' }
+                : isCall
+                  ? { bg: 'bg-amber-100 hover:bg-amber-200 border-amber-300', text: 'text-amber-900', accent: 'bg-amber-500' }
+                  : isMeeting
+                    ? { bg: 'bg-emerald-100 hover:bg-emerald-200 border-emerald-300', text: 'text-emerald-900', accent: 'bg-emerald-500' }
+                    : { bg: 'bg-violet-100 hover:bg-violet-200 border-violet-300', text: 'text-violet-900', accent: 'bg-violet-500' };
+              items.push({
+                key: `r-${r.id}`,
+                id: r.id,
+                topPx: (hourFloat - WEEK_START_HOUR) * HOUR_PX,
+                heightPx: 40,
+                title: r.title,
+                subtitle: [
+                  rd.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' }),
+                  r.leadName,
+                  r.leadPhone,
+                ].filter(Boolean).join(' • '),
+                tone,
+                completed,
+                href: r.leadId ? `/crm/${department}/leady/${r.leadId}` : null,
+                action: !completed ? () => handleCompleteReminder(r.id, r) : null,
+                actionTitle: 'Oznacz jako wykonane',
+                kind: isCall ? 'call' : isMeeting ? 'meeting' : 'note',
+              });
+            });
+
+            // Kontakty bez godziny — strefa "cały dzień" pod nagłówkiem; tu pokażemy je o 8:00
+            // ale lepiej w osobnej strefie — pominiemy w gridzie, pokażemy w nagłówku jako badge
+            // (kontakty nie maja godziny, sa to pole nextContactDate jako data dnia)
+
+            return (
+              <div
+                key={dayIdx}
+                className={`relative border-l border-stone-200 ${isToday ? 'bg-blue-50/30' : ''} ${draggingId ? 'cursor-copy' : ''}`}
+                onClick={(e) => {
+                  // klik na pustą siatkę → otwórz modal z wybraną datą/godziną
+                  if (e.target !== e.currentTarget) return;
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const y = e.clientY - rect.top + e.currentTarget.scrollTop;
+                  const hourFloat = WEEK_START_HOUR + y / HOUR_PX;
+                  const hour = Math.floor(hourFloat);
+                  const minute = Math.round((hourFloat - hour) * 4) * 15; // snap 15 min
+                  const date = new Date(d);
+                  date.setHours(hour, minute === 60 ? 0 : minute, 0, 0);
+                  if (minute === 60) date.setHours(hour + 1, 0, 0, 0);
+                  onAddAt?.(date);
+                }}
+                onDragOver={(e) => handleDragOverDay(e, dayIdx, d)}
+                onDragLeave={() => { if (dragOver?.dayIdx === dayIdx) setDragOver(null); }}
+                onDrop={(e) => handleDropOnDay(e, d)}
+              >
+                {/* Wskaznik miejsca upuszczenia */}
+                {dragOver && dragOver.dayIdx === dayIdx && (
+                  <div
+                    className="absolute left-0.5 right-0.5 h-0.5 bg-blue-500 z-30 pointer-events-none rounded-full shadow"
+                    style={{ top: dragOver.topPx }}
+                  />
+                )}
+                {/* Linie godzin tła */}
+                {hours.map(h => (
+                  <div key={h} className="border-b border-stone-100 pointer-events-none" style={{ height: HOUR_PX }} />
+                ))}
+
+                {/* Kontakty/klientReminders bez godziny — chip na górze */}
+                {(ev.contacts.length > 0 || ev.clientReminders.length > 0) && (
+                  <div className="absolute top-0.5 left-1 right-1 flex flex-col gap-0.5 z-10 pointer-events-none">
+                    {ev.contacts.slice(0, 2).map(l => {
+                      const done = isContactedOnDate(l, dStr);
+                      return (
+                        <Link
+                          key={`c-${l.id}`}
+                          to={`/crm/${department}/leady/${l.id}`}
+                          state={{ from: 'calendar' }}
+                          className={`pointer-events-auto block text-[10px] px-1.5 py-0.5 rounded truncate ${done ? 'bg-emerald-100 text-emerald-700 line-through' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}
+                          title={`Kontakt z leadem: ${l.name}`}
+                        >
+                          ☎ {l.name}
+                        </Link>
+                      );
+                    })}
+                    {ev.contacts.length > 2 && (
+                      <span className="text-[9px] text-stone-400 px-1">+{ev.contacts.length - 2}</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Wydarzenia z godziną */}
+                {items.map(it => {
+                  const isDragging = draggingId === it.id;
+                  const inner = (
+                    <>
+                      <div className={`absolute left-0 top-0 bottom-0 w-1 ${it.tone.accent}`} />
+                      <div className="pl-2 pr-1 py-0.5 h-full flex flex-col justify-center min-w-0">
+                        <div className={`text-[11px] font-semibold truncate ${it.tone.text}`}>
+                          {it.completed && <CheckIcon className="w-3 h-3 inline -mt-0.5 mr-0.5" />}
+                          {it.title}
+                        </div>
+                        <div className="text-[9px] text-stone-600 truncate">{it.subtitle}</div>
+                      </div>
+                    </>
+                  );
+                  return (
+                    <div
+                      key={it.key}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, it.id)}
+                      onDragEnd={handleDragEnd}
+                      className={`absolute left-0.5 right-0.5 rounded border ${it.tone.bg} shadow-sm overflow-hidden transition-all group/ev select-none ${isDragging ? 'opacity-40 ring-2 ring-blue-400' : ''} ${it.completed ? 'opacity-70' : ''} cursor-grab active:cursor-grabbing`}
+                      style={{ top: it.topPx, height: it.heightPx }}
+                      title={`${it.title}${it.completed ? ' (wykonane)' : ''} — przeciagnij aby zmienic termin`}
+                    >
+                      {it.href ? (
+                        <Link to={it.href} state={{ from: 'calendar' }} className="block relative h-full" draggable={false} onDragStart={(e) => e.preventDefault()}>
+                          {inner}
+                        </Link>
+                      ) : (
+                        <div className="relative h-full">{inner}</div>
+                      )}
+                      {it.action && (
+                        <button
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); it.action(); }}
+                          className="absolute top-0.5 right-0.5 p-0.5 rounded bg-white/70 hover:bg-white text-stone-500 hover:text-emerald-600 opacity-0 group-hover/ev:opacity-100 transition"
+                          title={it.actionTitle}
+                        >
+                          <CheckIcon className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* Wskaźnik aktualnego czasu */}
+                {nowVisible && nowDayIdx === dayIdx && (
+                  <div className="absolute left-0 right-0 z-20 pointer-events-none" style={{ top: nowTopPx }}>
+                    <div className="relative">
+                      <div className="absolute -left-1 -top-1 w-2 h-2 rounded-full bg-red-500" />
+                      <div className="h-px bg-red-500" />
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -237,9 +621,11 @@ const Calendar = () => {
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [viewMode, setViewMode] = useState(() => localStorage.getItem('cal_viewMode') || 'grid');
+  const [prefillDate, setPrefillDate] = useState(null);
+  const [viewMode, setViewMode] = useState(() => localStorage.getItem('cal_viewMode') || 'week');
   const [filterMode, setFilterMode] = useState(() => localStorage.getItem('cal_filterMode') || 'my');
   const [selectedGridDay, setSelectedGridDay] = useState(new Date().getDate());
+  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
 
   const handleViewMode = (mode) => { setViewMode(mode); localStorage.setItem('cal_viewMode', mode); };
   const handleFilterMode = (mode) => { setFilterMode(mode); localStorage.setItem('cal_filterMode', mode); window.dispatchEvent(new Event('calFilterChanged')); };
@@ -249,10 +635,10 @@ const Calendar = () => {
   const department = location.pathname.split('/')[2];
 
   const today = new Date();
-  const todayStr = today.toISOString().slice(0, 10);
+  const todayStr = toLocalDateStr(today);
   const oneWeekAgo = new Date(today);
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-  const oneWeekAgoStr = oneWeekAgo.toISOString().slice(0, 10);
+  const oneWeekAgoStr = toLocalDateStr(oneWeekAgo);
 
   useEffect(() => {
     const unsubReminders = onSnapshot(collection(db, "reminders"), (snapshot) => {
@@ -288,15 +674,15 @@ const Calendar = () => {
   const getEventsForDateStr = (dateStr) => {
     const contacts = filteredLeads.filter(l => {
       if (!l.nextContactDate || l.status === 'klient' || l.status === 'spalony') return false;
-      return new Date(l.nextContactDate).toISOString().slice(0, 10) === dateStr;
+      return toLocalDateStr(l.nextContactDate) === dateStr;
     });
     const clientReminders = filteredLeads.filter(l => {
       if (!l.nextReminderDate || l.status !== 'klient') return false;
-      return new Date(l.nextReminderDate).toISOString().slice(0, 10) === dateStr;
+      return toLocalDateStr(l.nextReminderDate) === dateStr;
     });
     const dayReminders = filteredReminders.filter(r => {
       const rDate = r.date?.seconds ? new Date(r.date.seconds * 1000) : new Date(r.date);
-      return rDate.toISOString().slice(0, 10) === dateStr;
+      return toLocalDateStr(rDate) === dateStr;
     });
     return { contacts, clientReminders, reminders: dayReminders };
   };
@@ -305,7 +691,7 @@ const Calendar = () => {
   const isContactedOnDate = (lead, dateStr) => {
     if (!lead.lastContactDate) return false;
     try {
-      return new Date(lead.lastContactDate).toISOString().slice(0, 10) === dateStr;
+      return toLocalDateStr(lead.lastContactDate) === dateStr;
     } catch { return false; }
   };
 
@@ -347,12 +733,12 @@ const Calendar = () => {
 
     filteredLeads.forEach(l => {
       if (l.nextContactDate && l.status !== 'klient' && l.status !== 'spalony') {
-        const ds = new Date(l.nextContactDate).toISOString().slice(0, 10);
+        const ds = toLocalDateStr(l.nextContactDate);
         if (!dateMap[ds]) dateMap[ds] = { contacts: [], clientReminders: [], reminders: [] };
         dateMap[ds].contacts.push(l);
       }
       if (l.nextReminderDate && l.status === 'klient') {
-        const ds = new Date(l.nextReminderDate).toISOString().slice(0, 10);
+        const ds = toLocalDateStr(l.nextReminderDate);
         if (!dateMap[ds]) dateMap[ds] = { contacts: [], clientReminders: [], reminders: [] };
         dateMap[ds].clientReminders.push(l);
       }
@@ -360,17 +746,22 @@ const Calendar = () => {
 
     filteredReminders.filter(r => !r.isCompleted).forEach(r => {
       const rDate = r.date?.seconds ? new Date(r.date.seconds * 1000) : new Date(r.date);
-      const ds = rDate.toISOString().slice(0, 10);
+      const ds = toLocalDateStr(rDate);
       if (!dateMap[ds]) dateMap[ds] = { contacts: [], clientReminders: [], reminders: [] };
       dateMap[ds].reminders.push(r);
     });
 
-    // Sort by date
+    // Sort by date, and sort reminders within each day by time
     return Object.entries(dateMap)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([dateStr, events]) => ({
         dateStr,
         ...events,
+        reminders: [...events.reminders].sort((a, b) => {
+          const ta = a.date?.seconds ? a.date.seconds * 1000 : new Date(a.date).getTime();
+          const tb = b.date?.seconds ? b.date.seconds * 1000 : new Date(b.date).getTime();
+          return ta - tb;
+        }),
         isOverdue: dateStr < todayStr,
         isToday: dateStr === todayStr,
       }));
@@ -390,9 +781,9 @@ const Calendar = () => {
     const date = new Date(dateStr + 'T00:00:00');
     if (dateStr === todayStr) return 'Dzisiaj';
     const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
-    if (dateStr === yesterday.toISOString().slice(0, 10)) return 'Wczoraj';
+    if (dateStr === toLocalDateStr(yesterday)) return 'Wczoraj';
     const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
-    if (dateStr === tomorrow.toISOString().slice(0, 10)) return 'Jutro';
+    if (dateStr === toLocalDateStr(tomorrow)) return 'Jutro';
     return date.toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' });
   };
 
@@ -453,10 +844,16 @@ const Calendar = () => {
               Lista
             </button>
             <button
+              onClick={() => handleViewMode('week')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${viewMode === 'week' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+            >
+              Tydzień
+            </button>
+            <button
               onClick={() => handleViewMode('grid')}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${viewMode === 'grid' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
             >
-              Siatka
+              Miesiąc
             </button>
           </div>
 
@@ -576,7 +973,7 @@ const Calendar = () => {
               setCurrentDate={setCurrentDate}
               selectedDate={null}
               onSelectDate={(date) => {
-                const ds = date.toISOString().slice(0, 10);
+                const ds = toLocalDateStr(date);
                 const el = document.getElementById(`day-${ds}`);
                 if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
               }}
@@ -603,6 +1000,20 @@ const Calendar = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ===== WEEK VIEW ===== */}
+      {viewMode === 'week' && (
+        <WeekView
+          weekStart={weekStart}
+          setWeekStart={setWeekStart}
+          getEventsForDateStr={getEventsForDateStr}
+          isContactedOnDate={isContactedOnDate}
+          handleCompleteReminder={handleCompleteReminder}
+          handleDismissContact={handleDismissContact}
+          department={department}
+          onAddAt={(date) => { setPrefillDate(date); setShowAddModal(true); }}
+        />
       )}
 
       {/* ===== GRID VIEW ===== */}
@@ -747,18 +1158,64 @@ const Calendar = () => {
                           </div>
                         );
                       })}
-                      {ev.reminders.filter(r => !r.isCompleted).map(r => (
-                        <div key={r.id} className="flex items-center gap-2.5 p-2.5 bg-violet-50 rounded-lg">
-                          <BellIcon className="w-3.5 h-3.5 text-violet-600 flex-shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium text-stone-900 truncate">{r.title}</p>
-                            <p className="text-[10px] text-stone-400">{r.createdBy || 'Przypomnienie'}</p>
-                          </div>
-                          <button onClick={() => handleCompleteReminder(r.id, r)} className="p-1 hover:bg-emerald-100 rounded transition-colors">
-                            <CheckIcon className="w-3 h-3 text-stone-400 hover:text-emerald-600" />
-                          </button>
-                        </div>
-                      ))}
+                      {ev.reminders
+                        .filter(r => !r.isCompleted)
+                        .slice()
+                        .sort((a, b) => {
+                          const ta = a.date?.seconds ? a.date.seconds * 1000 : new Date(a.date).getTime();
+                          const tb = b.date?.seconds ? b.date.seconds * 1000 : new Date(b.date).getTime();
+                          return ta - tb;
+                        })
+                        .map(r => {
+                          const rDate = r.date?.seconds ? new Date(r.date.seconds * 1000) : new Date(r.date);
+                          const timeStr = !isNaN(rDate) ? rDate.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' }) : '';
+                          const isCall = r.type === 'rozmowa';
+                          const isMeeting = r.type === 'spotkanie';
+                          const Ic = isCall ? PhoneIcon : isMeeting ? CheckIcon : BellIcon;
+                          const tone = isCall
+                            ? 'bg-amber-50 hover:bg-amber-100 text-amber-600'
+                            : isMeeting
+                              ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-600'
+                              : 'bg-violet-50 hover:bg-violet-100 text-violet-600';
+                          const body = (
+                            <>
+                              <Ic className="w-3.5 h-3.5 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  {timeStr && (
+                                    <span className="text-[10px] font-mono font-semibold text-stone-700 bg-white/70 px-1 rounded flex-shrink-0">{timeStr}</span>
+                                  )}
+                                  <p className="text-xs font-medium text-stone-900 truncate">{r.title}</p>
+                                </div>
+                                {(r.leadName || r.leadPhone) ? (
+                                  <p className="text-[10px] text-stone-500 truncate">
+                                    {r.leadName}{r.leadPhone ? ` • ${r.leadPhone}` : ''}
+                                  </p>
+                                ) : (
+                                  <p className="text-[10px] text-stone-400 truncate">{r.createdBy || 'Przypomnienie'}</p>
+                                )}
+                              </div>
+                            </>
+                          );
+                          return (
+                            <div key={r.id} className={`flex items-center gap-2.5 p-2.5 rounded-lg ${tone}`}>
+                              {r.leadId ? (
+                                <Link
+                                  to={`/crm/${department}/leady/${r.leadId}`}
+                                  state={{ from: 'calendar' }}
+                                  className="flex items-center gap-2.5 flex-1 min-w-0"
+                                >
+                                  {body}
+                                </Link>
+                              ) : (
+                                <div className="flex items-center gap-2.5 flex-1 min-w-0">{body}</div>
+                              )}
+                              <button onClick={() => handleCompleteReminder(r.id, r)} className="p-1 hover:bg-white/60 rounded transition-colors flex-shrink-0" title="Oznacz jako wykonane">
+                                <CheckIcon className="w-3 h-3 text-stone-400 hover:text-emerald-600" />
+                              </button>
+                            </div>
+                          );
+                        })}
                     </div>
                   )}
                 </div>
@@ -792,31 +1249,268 @@ const Calendar = () => {
       )}
 
       {showAddModal && (
-        <AddReminderModal leads={leads} currentUser={currentUser} onClose={() => setShowAddModal(false)} onSuccess={() => setShowAddModal(false)} />
+        <AddReminderModal
+          leads={leads}
+          currentUser={currentUser}
+          prefillDate={prefillDate}
+          onClose={() => { setShowAddModal(false); setPrefillDate(null); }}
+          onSuccess={() => { setShowAddModal(false); setPrefillDate(null); }}
+        />
       )}
     </div>
   );
 };
 
-// Modal dodawania przypomnienia
-const AddReminderModal = ({ leads, currentUser, onClose, onSuccess }) => {
-  const [formData, setFormData] = useState({
-    title: '',
-    date: '',
-    leadId: '',
-    type: 'reczne',
-    notes: ''
-  });
+// Modal dodawania przypomnienia / notatki / rozmowy
+const REMINDER_TYPES = [
+  { id: 'rozmowa', label: 'Rozmowa', icon: PhoneIcon, iconBg: 'bg-amber-100 text-amber-600', placeholder: 'np. Zadzwonić w sprawie umowy' },
+  { id: 'notatka', label: 'Notatka', icon: BellIcon, iconBg: 'bg-violet-100 text-violet-600', placeholder: 'np. Sprawdzić dokumenty klienta' },
+  { id: 'spotkanie', label: 'Spotkanie', icon: CheckIcon, iconBg: 'bg-emerald-100 text-emerald-600', placeholder: 'np. Spotkanie w kancelarii' },
+];
+
+const formatNowLocal = (offsetMinutes = 30) => {
+  const d = new Date(Date.now() + offsetMinutes * 60000);
+  d.setSeconds(0, 0);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+// ===== Intuicyjny picker daty + godziny =====
+const DateTimePickerNice = ({ value, onChange }) => {
+  // value w formacie "YYYY-MM-DDTHH:MM"
+  const parsed = useMemo(() => {
+    if (!value) return new Date();
+    const d = new Date(value);
+    return isNaN(d) ? new Date() : d;
+  }, [value]);
+
+  const pad = (n) => String(n).padStart(2, '0');
+  const toStr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+
+  // Szybkie dni: 7 dni od dzisiaj
+  const quickDays = useMemo(() => {
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() + i);
+      return d;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const setDay = (d) => {
+    const next = new Date(parsed);
+    next.setFullYear(d.getFullYear(), d.getMonth(), d.getDate());
+    onChange(toStr(next));
+  };
+  const setHourMinute = (h, m) => {
+    const next = new Date(parsed);
+    next.setHours(h, m, 0, 0);
+    onChange(toStr(next));
+  };
+  const dayLabel = (d) => {
+    const diff = Math.round((d - today) / 86400000);
+    if (diff === 0) return 'Dziś';
+    if (diff === 1) return 'Jutro';
+    if (diff === 2) return 'Pojutrze';
+    return d.toLocaleDateString('pl-PL', { weekday: 'short' });
+  };
+  const isSameDay = (a, b) =>
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+  // Sloty czasu — co 30 min od 7:00 do 20:30
+  const timeSlots = useMemo(() => {
+    const out = [];
+    for (let h = 7; h <= 20; h++) {
+      out.push({ h, m: 0 });
+      out.push({ h, m: 30 });
+    }
+    return out;
+  }, []);
+
+  const currentH = parsed.getHours();
+  const currentM = parsed.getMinutes();
+
+  const fullDateLabel = parsed.toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const timeLabel = `${pad(currentH)}:${pad(currentM)}`;
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-stone-700 mb-2">
+        Data i godzina *
+      </label>
+
+      {/* Podsumowanie wyboru */}
+      <div className="mb-3 px-4 py-3 bg-gradient-to-br from-stone-900 to-stone-700 text-white rounded-lg">
+        <div className="text-[11px] uppercase tracking-wider text-white/60 font-semibold">Wybrany termin</div>
+        <div className="flex items-baseline gap-3 mt-0.5 flex-wrap">
+          <div className="text-base font-semibold capitalize">{fullDateLabel}</div>
+          <div className="text-2xl font-bold font-mono tracking-tight">{timeLabel}</div>
+        </div>
+      </div>
+
+      {/* Szybkie dni */}
+      <div className="mb-3">
+        <div className="text-[11px] uppercase tracking-wider text-stone-500 font-semibold mb-1.5">Dzień</div>
+        <div className="grid grid-cols-7 gap-1">
+          {quickDays.map((d, i) => {
+            const active = isSameDay(d, parsed);
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setDay(d)}
+                className={`flex flex-col items-center py-2 rounded-lg border-2 transition-all ${
+                  active
+                    ? 'border-stone-900 bg-stone-900 text-white shadow-md'
+                    : 'border-stone-200 bg-white text-stone-700 hover:border-stone-400'
+                }`}
+              >
+                <span className={`text-[10px] uppercase font-semibold ${active ? 'text-white/70' : 'text-stone-400'}`}>{dayLabel(d)}</span>
+                <span className="text-base font-bold leading-none mt-0.5">{d.getDate()}</span>
+                <span className={`text-[9px] mt-0.5 ${active ? 'text-white/60' : 'text-stone-400'}`}>{d.toLocaleDateString('pl-PL', { month: 'short' })}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          <input
+            type="date"
+            value={`${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}`}
+            onChange={(e) => {
+              if (!e.target.value) return;
+              const [y, mo, da] = e.target.value.split('-').map(Number);
+              const next = new Date(parsed);
+              next.setFullYear(y, mo - 1, da);
+              onChange(toStr(next));
+            }}
+            className="text-xs px-2 py-1.5 border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400"
+          />
+          <span className="text-[11px] text-stone-400">…lub wybierz inną datę</span>
+        </div>
+      </div>
+
+      {/* Godzina — sloty co 30 min */}
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="text-[11px] uppercase tracking-wider text-stone-500 font-semibold">Godzina</div>
+          <div className="flex items-center gap-1">
+            <input
+              type="number"
+              min={0}
+              max={23}
+              value={currentH}
+              onChange={(e) => setHourMinute(Math.max(0, Math.min(23, Number(e.target.value) || 0)), currentM)}
+              className="w-12 text-center text-sm font-mono px-1.5 py-1 border border-stone-200 rounded focus:outline-none focus:border-stone-400"
+            />
+            <span className="text-stone-400 font-bold">:</span>
+            <input
+              type="number"
+              min={0}
+              max={59}
+              step={5}
+              value={currentM}
+              onChange={(e) => setHourMinute(currentH, Math.max(0, Math.min(59, Number(e.target.value) || 0)))}
+              className="w-12 text-center text-sm font-mono px-1.5 py-1 border border-stone-200 rounded focus:outline-none focus:border-stone-400"
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-4 sm:grid-cols-7 gap-1 max-h-44 overflow-y-auto pr-1">
+          {timeSlots.map(({ h, m }) => {
+            const active = h === currentH && m === currentM;
+            const label = `${pad(h)}:${pad(m)}`;
+            return (
+              <button
+                key={label}
+                type="button"
+                onClick={() => setHourMinute(h, m)}
+                className={`px-1 py-1.5 rounded text-xs font-mono font-medium transition-all border ${
+                  active
+                    ? 'bg-stone-900 text-white border-stone-900 shadow-md'
+                    : 'bg-white text-stone-700 border-stone-200 hover:border-stone-400 hover:bg-stone-50'
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const AddReminderModal = ({ leads, currentUser, prefillDate, onClose, onSuccess }) => {
+  const initialDate = useMemo(() => {
+    const d = prefillDate ? new Date(prefillDate) : new Date(Date.now() + 30 * 60000);
+    d.setSeconds(0, 0);
+    if (!prefillDate) {
+      // zaokrąglij do najbliższych 15 min
+      d.setMinutes(Math.ceil(d.getMinutes() / 15) * 15);
+    }
+    return d;
+  }, [prefillDate]);
+  const pad = (n) => String(n).padStart(2, '0');
+  const dateToString = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+  const [type, setType] = useState('rozmowa');
+  const [title, setTitle] = useState('');
+  const [date, setDate] = useState(() => dateToString(initialDate));
+  const [notes, setNotes] = useState('');
+  const [leadId, setLeadId] = useState('');
+  const [search, setSearch] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const selectedLead = useMemo(
+    () => leads.find(l => l.id === leadId) || null,
+    [leads, leadId]
+  );
+
+  const suggestions = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return [];
+    return leads
+      .filter(l =>
+        String(l.name || '').toLowerCase().includes(q) ||
+        String(l.phone || '').toLowerCase().includes(q) ||
+        String(l.email || '').toLowerCase().includes(q)
+      )
+      .slice(0, 8);
+  }, [leads, search]);
+
+  const handleSelectLead = (lead) => {
+    setLeadId(lead.id);
+    setSearch('');
+    setShowSuggestions(false);
+    if (!title.trim()) {
+      const def = type === 'rozmowa' ? `Zadzwonić do ${lead.name}`
+        : type === 'spotkanie' ? `Spotkanie z ${lead.name}`
+        : `Notatka — ${lead.name}`;
+      setTitle(def);
+    }
+  };
+
+  const clearLead = () => {
+    setLeadId('');
+    setSearch('');
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!title.trim() || !date) return;
     setSaving(true);
 
     try {
       await addDoc(collection(db, "reminders"), {
-        ...formData,
-        date: new Date(formData.date).toISOString(),
+        title: title.trim(),
+        date: new Date(date).toISOString(),
+        leadId: leadId || '',
+        leadName: selectedLead?.name || '',
+        leadPhone: selectedLead?.phone || '',
+        type,
+        notes: notes.trim(),
         isCompleted: false,
         isAutomatic: false,
         repeatDays: null,
@@ -826,25 +1520,143 @@ const AddReminderModal = ({ leads, currentUser, onClose, onSuccess }) => {
       onSuccess();
     } catch (error) {
       console.error("Błąd:", error);
+      alert('Nie udało się zapisać: ' + error.message);
     } finally {
       setSaving(false);
     }
   };
 
+  const activeType = REMINDER_TYPES.find(t => t.id === type) || REMINDER_TYPES[0];
+  const ActiveIcon = activeType.icon;
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="fixed inset-0 bg-black/50" onClick={onClose}></div>
-      
+
       <div className="relative min-h-full flex items-center justify-center p-4">
-        <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md">
-          
-          <div className="px-6 py-4 border-b border-stone-200">
-            <h2 className="text-lg font-semibold text-stone-900">Dodaj przypomnienie</h2>
+        <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+
+          <div className="px-6 py-4 border-b border-stone-200 flex-shrink-0">
+            <h2 className="text-lg font-semibold text-stone-900">Dodaj wydarzenie</h2>
+            <p className="text-xs text-stone-500 mt-0.5">Zaplanuj rozmowę, spotkanie lub notatkę</p>
           </div>
 
-          <form onSubmit={handleSubmit}>
-            <div className="p-6 space-y-4">
-              
+          <form onSubmit={handleSubmit} className="flex-1 min-h-0 flex flex-col">
+            <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-5">
+
+              {/* Typ */}
+              <div>
+                <label className="block text-sm font-medium text-stone-700 mb-2">Typ</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {REMINDER_TYPES.map(t => {
+                    const Ic = t.icon;
+                    const active = type === t.id;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setType(t.id)}
+                        className={`flex flex-col items-center gap-1.5 px-3 py-3 rounded-lg border-2 transition-all ${
+                          active
+                            ? `border-stone-900 bg-stone-50`
+                            : 'border-stone-200 hover:border-stone-300'
+                        }`}
+                      >
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${t.iconBg}`}>
+                          <Ic className="w-4 h-4" />
+                        </div>
+                        <span className={`text-xs font-medium ${active ? 'text-stone-900' : 'text-stone-600'}`}>{t.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Wyszukiwarka leada */}
+              <div className="relative">
+                <label className="block text-sm font-medium text-stone-700 mb-1.5">
+                  Powiązany kontakt (opcjonalnie)
+                </label>
+
+                {selectedLead ? (
+                  <div className="border-2 border-stone-900 bg-stone-50 rounded-lg p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-stone-900 truncate">{selectedLead.name}</p>
+                        <div className="mt-1 space-y-0.5">
+                          {selectedLead.phone && (
+                            <p className="text-xs text-stone-600 flex items-center gap-1.5">
+                              <PhoneIcon className="w-3 h-3 text-stone-400" />
+                              <span className="font-mono">{selectedLead.phone}</span>
+                            </p>
+                          )}
+                          {selectedLead.email && (
+                            <p className="text-xs text-stone-500 truncate">{selectedLead.email}</p>
+                          )}
+                          <div className="flex flex-wrap gap-1.5 mt-1.5">
+                            {selectedLead.status && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-white border border-stone-200 text-stone-600 uppercase tracking-wide">
+                                {selectedLead.status}
+                              </span>
+                            )}
+                            {selectedLead.assignedTo && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-white border border-stone-200 text-stone-600">
+                                {selectedLead.assignedTo}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={clearLead}
+                        className="p-1 text-stone-400 hover:text-red-500 rounded"
+                        title="Usuń"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      value={search}
+                      onChange={(e) => { setSearch(e.target.value); setShowSuggestions(true); }}
+                      onFocus={() => setShowSuggestions(true)}
+                      onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                      placeholder="Wyszukaj po imieniu, nazwisku lub telefonie..."
+                      className="w-full px-4 py-2.5 border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400 transition-colors"
+                    />
+                    {showSuggestions && suggestions.length > 0 && (
+                      <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                        {suggestions.map(lead => (
+                          <button
+                            key={lead.id}
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => handleSelectLead(lead)}
+                            className="w-full text-left px-3 py-2.5 hover:bg-stone-50 border-b border-stone-100 last:border-0 transition-colors"
+                          >
+                            <p className="text-sm font-medium text-stone-900 truncate">{lead.name}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              {lead.phone && <span className="text-[11px] text-stone-500 font-mono">{lead.phone}</span>}
+                              {lead.assignedTo && <span className="text-[11px] text-stone-400">• {lead.assignedTo}</span>}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {showSuggestions && search.trim() && suggestions.length === 0 && (
+                      <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg p-3">
+                        <p className="text-xs text-stone-400 text-center">Brak wyników</p>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Tytuł */}
               <div>
                 <label className="block text-sm font-medium text-stone-700 mb-1.5">
                   Tytuł *
@@ -852,49 +1664,24 @@ const AddReminderModal = ({ leads, currentUser, onClose, onSuccess }) => {
                 <input
                   type="text"
                   required
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
                   className="w-full px-4 py-2.5 border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400 transition-colors"
-                  placeholder="np. Zadzwonić do klienta"
+                  placeholder={activeType.placeholder}
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-stone-700 mb-1.5">
-                  Data *
-                </label>
-                <input
-                  type="datetime-local"
-                  required
-                  value={formData.date}
-                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400 transition-colors"
-                />
-              </div>
+              {/* Data + godzina — intuicyjny picker */}
+              <DateTimePickerNice value={date} onChange={setDate} />
 
-              <div>
-                <label className="block text-sm font-medium text-stone-700 mb-1.5">
-                  Powiązany klient (opcjonalnie)
-                </label>
-                <select
-                  value={formData.leadId}
-                  onChange={(e) => setFormData({ ...formData, leadId: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400 transition-colors bg-white"
-                >
-                  <option value="">-- Brak --</option>
-                  {leads.map(lead => (
-                    <option key={lead.id} value={lead.id}>{lead.name}</option>
-                  ))}
-                </select>
-              </div>
-
+              {/* Notatka */}
               <div>
                 <label className="block text-sm font-medium text-stone-700 mb-1.5">
                   Notatka
                 </label>
                 <textarea
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
                   rows={2}
                   className="w-full px-4 py-2.5 border border-stone-200 rounded-lg focus:outline-none focus:border-stone-400 transition-colors resize-none"
                   placeholder="Dodatkowe informacje..."
@@ -902,7 +1689,7 @@ const AddReminderModal = ({ leads, currentUser, onClose, onSuccess }) => {
               </div>
             </div>
 
-            <div className="px-6 py-4 border-t border-stone-200 flex gap-3">
+            <div className="px-6 py-4 border-t border-stone-200 flex gap-3 flex-shrink-0">
               <button
                 type="button"
                 onClick={onClose}
@@ -912,9 +1699,10 @@ const AddReminderModal = ({ leads, currentUser, onClose, onSuccess }) => {
               </button>
               <button
                 type="submit"
-                disabled={saving}
-                className="flex-1 px-4 py-2.5 bg-stone-900 text-white rounded-lg hover:bg-stone-800 transition-colors font-medium disabled:opacity-50"
+                disabled={saving || !title.trim() || !date}
+                className="flex-1 px-4 py-2.5 bg-stone-900 text-white rounded-lg hover:bg-stone-800 transition-colors font-medium disabled:opacity-50 inline-flex items-center justify-center gap-2"
               >
+                <ActiveIcon className="w-4 h-4" />
                 {saving ? 'Zapisywanie...' : 'Dodaj'}
               </button>
             </div>
